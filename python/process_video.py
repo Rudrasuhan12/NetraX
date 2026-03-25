@@ -1,17 +1,18 @@
 from extract_frames import extract_frames
 from hash import generate_hash
-from store import store_hash
+from publisher import publish_frame
 
-def process_video(video_path, video_id):
+def process_video(video_path):
+    print("📡 Sending frames to Pub/Sub...")
+
     frames = extract_frames(video_path)
 
-    for frame_id, frame in frames:
+    for _, frame in frames:
         hash_value = generate_hash(frame)
-        timestamp = frame_id * 2  # since interval = 2 sec
+        publish_frame(hash_value)
 
-        store_hash(video_id, frame_id, hash_value, timestamp)
+    print("✅ Done sending frames")
 
-    print("✅ Video processed and hashes stored!")
-
-# Example usage
-process_video("test.mp4", "match1")
+if __name__ == "__main__":
+    video_path = input("Enter video name: ")
+    process_video(video_path)
