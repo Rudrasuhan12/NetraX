@@ -1,3 +1,5 @@
+import os
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "../serviceAccountKey.json"
 from google.cloud import pubsub_v1
 import json
 from fetch_hashes import fetch_hashes
@@ -12,7 +14,6 @@ subscription_path = subscriber.subscription_path(project_id, subscription_id)
 
 stored_hashes = fetch_hashes()
 
-# ✅ Confidence function (keep above callback)
 def calculate_confidence(distance):
     return max(0, 100 - distance)
 
@@ -35,7 +36,6 @@ def callback(message):
 
             print(f"🚨 MATCH DETECTED (Confidence: {confidence}%)")
 
-            # ✅ Store alert in Firestore
             store_alert("match1", confidence)
 
             match_found = True
@@ -47,7 +47,6 @@ def callback(message):
     message.ack()
 
 
-# ✅ Start subscriber
 streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
 
 print("📡 Listening for messages...")
