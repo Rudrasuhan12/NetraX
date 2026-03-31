@@ -1,5 +1,5 @@
 import os
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "../serviceAccountKey.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "serviceAccountKey.json"
 from google.cloud import pubsub_v1
 import json
 

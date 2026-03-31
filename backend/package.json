@@ -13,10 +13,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@google-cloud/storage": "^7.19.0",
+    "@google-cloud/storage": "^5.18.3",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "firebase-admin": "^13.7.0",
     "multer": "^2.1.1"
   },
   "devDependencies": {

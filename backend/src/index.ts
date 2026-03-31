@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import alertsRoute from "./routes/alerts";
 
 import uploadRoute from "./routes/upload";
 
@@ -17,6 +18,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api", uploadRoute);
+app.use("/api", alertsRoute);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
