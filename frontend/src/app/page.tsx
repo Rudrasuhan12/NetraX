@@ -18,6 +18,8 @@ interface Alert {
   confidence: number;
   risk_score: number;
   region: string;
+  response: string;   // 🔥 NEW
+  level: string;      // 🔥 NEW
 }
 
 export default function Dashboard() {
@@ -84,6 +86,12 @@ export default function Dashboard() {
     return "bg-yellow-500";
   };
 
+  const getLevelColor = (level: string) => {
+    if (level === "HIGH") return "text-red-400";
+    if (level === "MEDIUM") return "text-orange-400";
+    return "text-yellow-400";
+  };
+
   // 🌍 Map positions
   const positions: any = {
     India: { top: "55%", left: "65%" },
@@ -141,10 +149,21 @@ export default function Dashboard() {
                   </div>
 
                   <p className="mt-1">🎬 {alert.video_id}</p>
+
                   <p className="text-sm text-gray-400">
                     🌍 {alert.region} | 📊 {alert.confidence}%
                   </p>
 
+                  {/* 🔥 RESPONSE SYSTEM */}
+                  <p className="text-sm mt-2 text-blue-400">
+                    ⚡ {alert.response}
+                  </p>
+
+                  <p className={`text-xs ${getLevelColor(alert.level)}`}>
+                    Level: {alert.level}
+                  </p>
+
+                  {/* Risk Bar */}
                   <div className="mt-3">
                     <div className="w-full bg-gray-600 h-2 rounded">
                       <div

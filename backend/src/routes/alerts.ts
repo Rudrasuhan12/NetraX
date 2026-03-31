@@ -3,7 +3,6 @@ import admin from "firebase-admin";
 
 const router = express.Router();
 
-// ✅ Initialize Firebase (only once)
 if (!admin.apps.length) {
   const serviceAccount = require("../../serviceAccountKey.json");
 
@@ -14,7 +13,6 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// ✅ GET ALERTS (Clean + Sorted + Fixed Timestamp)
 router.get("/alerts", async (req, res) => {
   try {
     const snapshot = await db
@@ -28,7 +26,6 @@ router.get("/alerts", async (req, res) => {
 
       let formattedTimestamp = data.timestamp;
 
-      // 🔥 Fix Firestore Timestamp object
       if (formattedTimestamp && formattedTimestamp._seconds) {
         formattedTimestamp = new Date(
           formattedTimestamp._seconds * 1000
@@ -43,6 +40,8 @@ router.get("/alerts", async (req, res) => {
         region: data.region || "unknown",
         status: data.status || "UNKNOWN",
         source: data.source || "unknown",
+        response: data.response || "No action",   // 🔥 NEW
+        level: data.level || "UNKNOWN",           // 🔥 NEW
         timestamp: formattedTimestamp,
       };
     });
