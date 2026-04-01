@@ -9,6 +9,8 @@ interface Alert {
   video_id: string;
   confidence: number;
   embedding_score?: number;
+  misuse_category?: string;  // 🔥 NEW
+  misuse_reasoning?: string; // 🔥 NEW
   risk_score: number;
   region: string;
   response: string;
@@ -28,9 +30,9 @@ export default function Dashboard() {
   const [regionData, setRegionData] = useState<any[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   
-  // 🔥 NEW: Polish States
+  // Polish States
   const [isEventMode, setIsEventMode] = useState(false); 
-  const [isBooting, setIsBooting] = useState(true); // Initial load sequence
+  const [isBooting, setIsBooting] = useState(true);
 
   const soundEnabledRef = useRef(false);
   const lastAlertIdRef = useRef<string | null>(null);
@@ -102,6 +104,7 @@ export default function Dashboard() {
   };
 
   const getLevelColor = (level: string) => {
+    if (level === "CRITICAL") return "text-red-600";
     if (level === "HIGH") return "text-red-600";
     if (level === "MEDIUM") return "text-orange-500";
     return "text-yellow-600";
@@ -113,15 +116,17 @@ export default function Dashboard() {
     UK: { top: "35%", left: "48%" },
     Brazil: { top: "65%", left: "35%" },
     Indonesia: { top: "60%", left: "75%" },
+    Germany: { top: "32%", left: "52%" },
+    Japan: { top: "40%", left: "85%" },
     Global: { top: "50%", left: "50%" },
   };
 
   const highRisk = alerts.filter((a) => a.risk_score > 80).length;
   const avgConfidence = alerts.length > 0
-      ? Math.round(alerts.reduce((sum, a) => sum + a.confidence, 0) / alerts.length)
+      ? Math.round(alerts.reduce((sum, a) => sum + (a.embedding_score || a.confidence), 0) / alerts.length)
       : 0;
 
-  // 🔥 NEW: Custom CSS for smooth animations
+  // Custom CSS for smooth animations
   const customStyles = `
     @keyframes slideDownFade {
       0% { opacity: 0; transform: translateY(-20px); }
@@ -139,7 +144,7 @@ export default function Dashboard() {
     }
   `;
 
-  // 🔥 INITIAL BOOT SCREEN
+  // INITIAL BOOT SCREEN
   if (isBooting) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
@@ -148,7 +153,7 @@ export default function Dashboard() {
           INITIALIZING NETRA<span className="text-blue-500">X</span> CORE
         </h1>
         <p className="text-gray-400 mt-2 text-sm font-mono uppercase tracking-widest">Connecting to Pub/Sub Event Streams...</p>
-        <p className="text-gray-500 mt-1 text-xs font-mono">Loading Vertex AI Embedding Weights [OK]</p>
+        <p className="text-gray-500 mt-1 text-xs font-mono">Loading Vertex AI & Gemini Context Engine [OK]</p>
       </div>
     );
   }
@@ -169,8 +174,9 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold tracking-tight">
             Netra<span className="text-blue-600">X</span>
           </h1>
-          <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-            Production V2
+          <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></span>
+            Intelligence Core V2
           </span>
         </div>
         
@@ -203,21 +209,21 @@ export default function Dashboard() {
           <h2 className="text-4xl font-black mt-2 text-gray-800">{alerts.length}</h2>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">High-Risk Events</p>
+          <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">High-Risk Misuse Events</p>
           <h2 className="text-4xl font-black mt-2 text-red-600">{highRisk}</h2>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Avg. AI Confidence</p>
-          <h2 className="text-4xl font-black mt-2 text-purple-600">{avgConfidence}%</h2>
+          <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Avg. AI Verification Score</p>
+          <h2 className="text-4xl font-black mt-2 text-blue-600">{avgConfidence}%</h2>
         </div>
       </div>
 
       {/* PROPAGATION GRAPH */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-gray-800">Content Propagation Tracking</h2>
+          <h2 className="text-lg font-bold text-gray-800">Cross-Platform Traceability Graph</h2>
           <span className="bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Graph Intelligence
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Network Intelligence
           </span>
         </div>
         <div className="flex items-center space-x-6 overflow-x-auto pb-4 pt-2 custom-scrollbar">
@@ -261,9 +267,9 @@ export default function Dashboard() {
       <div className="grid grid-cols-3 gap-6">
         
         {/* ALERT FEED */}
-        <div className="col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[600px]">
+        <div className="col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[700px]">
           <div className="flex justify-between items-center mb-4 shrink-0 border-b border-gray-50 pb-4">
-            <h2 className="text-lg font-bold text-gray-800">Real-Time Detection Feed</h2>
+            <h2 className="text-lg font-bold text-gray-800">Real-Time Detection & Classification Feed</h2>
             <div className="text-xs text-gray-400 font-mono flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Worker Active
             </div>
@@ -271,7 +277,6 @@ export default function Dashboard() {
 
           <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 custom-scrollbar">
             {alerts.length === 0 ? (
-              // 🔥 NEW: RADAR EMPTY STATE
               <div className="h-full flex flex-col items-center justify-center text-gray-400">
                 <div className="relative w-32 h-32 rounded-full border border-blue-200 bg-blue-50 overflow-hidden flex items-center justify-center mb-4 shadow-inner">
                   <div className="absolute inset-0 radar-sweep rounded-full"></div>
@@ -306,23 +311,43 @@ export default function Dashboard() {
                       </div>
                       <div className="text-gray-300 font-bold">→</div>
                       <div className="flex flex-col">
-                        <span className="text-[10px] text-purple-600 font-bold uppercase tracking-wider mb-0.5">Stage 2: AI Core</span>
-                        <span className="text-sm font-black text-purple-700 flex items-center gap-1">🧠 Vertex: {alert.embedding_score || 'N/A'}%</span>
+                        <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mb-0.5">Stage 2: Vertex AI</span>
+                        <span className="text-sm font-black text-blue-700 flex items-center gap-1">🧠 Embedding: {alert.embedding_score || 'N/A'}%</span>
                       </div>
                       <div className="ml-auto flex items-center gap-1 text-xs text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded">
                         🌍 {alert.region}
                       </div>
                     </div>
 
+                    {/* 🔥 NEW: Gemini 2.5 Flash Context Engine Display */}
+                    {alert.misuse_category && (
+                      <div className="mb-4 bg-gradient-to-r from-purple-50 to-indigo-50 p-3.5 rounded-md border border-purple-100 shadow-sm">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] bg-purple-600 text-white px-2 py-0.5 rounded uppercase font-bold tracking-wider flex items-center gap-1">
+                              <span className="w-1 h-1 bg-white rounded-full animate-pulse"></span>
+                              Gemini 2.5 Analysis
+                            </span>
+                            <span className="text-sm font-black text-purple-900">{alert.misuse_category}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-purple-800 leading-relaxed font-medium">"{alert.misuse_reasoning}"</p>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between mt-4">
-                      <p className="text-sm text-red-600 font-bold flex items-center gap-1.5 bg-red-50 px-3 py-1.5 rounded-md border border-red-100">
-                        🚨 {alert.response}
+                      <p className={`text-sm font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-md border ${
+                        alert.level === "CRITICAL" ? "bg-red-50 text-red-600 border-red-100" :
+                        alert.level === "MEDIUM" ? "bg-orange-50 text-orange-600 border-orange-100" :
+                        "bg-yellow-50 text-yellow-600 border-yellow-100"
+                      }`}>
+                        {alert.level === "CRITICAL" ? "🚨" : alert.level === "MEDIUM" ? "⚠️" : "ℹ️"} {alert.response}
                       </p>
                       
                       <div className="w-1/3 text-right">
                         <div className="flex justify-end text-[10px] text-gray-500 mb-1 font-bold uppercase tracking-wider">
-                          <span>Risk Assessment</span>
-                          <span className="ml-2">{alert.risk_score}%</span>
+                          <span>Smart Risk Score</span>
+                          <span className={`ml-2 font-black ${getRiskColor(alert.risk_score).replace('bg-', 'text-')}`}>{alert.risk_score}%</span>
                         </div>
                         <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
                           <div className={`${getRiskColor(alert.risk_score)} h-1.5 rounded-full transition-all duration-1000 ease-out`} style={{ width: `${alert.risk_score}%` }}></div>

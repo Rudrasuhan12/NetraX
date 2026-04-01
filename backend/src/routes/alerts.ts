@@ -37,7 +37,9 @@ router.get("/alerts", async (req, res) => {
         id: doc.id,
         video_id: data.video_id || "unknown",
         confidence: data.confidence || 0,
-        embedding_score: data.embedding_score || null,  // 🔥 NEW: Pass the AI score to the frontend
+        embedding_score: data.embedding_score || null,
+        misuse_category: data.misuse_category || null,    
+        misuse_reasoning: data.misuse_reasoning || null,  
         risk_score: data.risk_score || 0,
         region: data.region || "unknown",
         status: data.status || "UNKNOWN",
@@ -55,7 +57,7 @@ router.get("/alerts", async (req, res) => {
   }
 });
 
-// 🔥 NEW: Fetch Propagation Tracking Data for the UI Graph
+// Fetch Propagation Tracking Data for the UI Graph
 router.get("/propagation", async (req, res) => {
   try {
     const snapshot = await db
