@@ -34,11 +34,14 @@ export default function Dashboard() {
   const [isEventMode, setIsEventMode] = useState(false); 
   const [isBooting, setIsBooting] = useState(true);
 
-  // 🔥 NEW: Takedown Generator States
+  // Takedown Generator States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [takedownText, setTakedownText] = useState("");
+
+  // Simulator State
+  const [isScanning, setIsScanning] = useState(false);
 
   const soundEnabledRef = useRef(false);
   const lastAlertIdRef = useRef<string | null>(null);
@@ -101,7 +104,7 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [isEventMode]);
 
-  // 🔥 NEW: Takedown Generation Trigger
+  // Takedown Generation Trigger
   const handleGenerateTakedown = async (alert: Alert) => {
     setSelectedAlert(alert);
     setIsModalOpen(true);
@@ -131,6 +134,19 @@ export default function Dashboard() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // Trigger Live Scan
+  const handleTriggerScan = async () => {
+    setIsScanning(true);
+    try {
+      await fetch("http://localhost:5000/api/trigger-scan", { 
+        method: "POST"
+      });
+    } catch (err) {
+      console.error("Failed to trigger scan", err);
+    }
+    setTimeout(() => setIsScanning(false), 1500); 
   };
 
   const getRiskColor = (risk: number) => {
@@ -189,8 +205,10 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 p-8 text-gray-900 transition-colors duration-500">
       <style>{customStyles}</style>
 
-      {/* HEADER & STATS CODE (Unchanged) */}
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-8">
+        
+        {/* LEFT SIDE: Branding */}
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight">
             Netra<span className="text-blue-600">X</span>
@@ -200,7 +218,35 @@ export default function Dashboard() {
             Intelligence Core V2
           </span>
         </div>
-        <div className="flex items-center gap-6">
+
+        {/* RIGHT SIDE: Controls Deck */}
+        <div className="flex items-center gap-5">
+          
+          {/* 🔥 REDESIGNED: Judge Verification Simulator Button */}
+          <div className="relative group flex items-center">
+            <button 
+                onClick={handleTriggerScan}
+                disabled={isScanning}
+                className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-xs transition-all shadow-sm border ${
+                    isScanning 
+                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" 
+                    : "bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-500/30"
+                }`}
+            >
+                <span className="text-sm">{isScanning ? "📡" : "🚀"}</span>
+                {isScanning ? "Intercepting Stream..." : "Simulate Live Web Scan"}
+            </button>
+            
+            {/* Sleek Hover Tooltip */}
+            <div className="absolute right-0 top-12 w-64 p-3 bg-gray-900 text-gray-300 text-[10px] font-mono rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none border border-gray-700">
+              <span className="block text-white font-bold mb-1 font-sans text-xs">For Judges & Reviewers:</span>
+              Instantly simulates the asynchronous Python Pub/Sub worker to demonstrate the Vertex AI & Gemini cloud processing pipeline.
+            </div>
+          </div>
+
+          <div className="w-px h-8 bg-gray-200 mx-1"></div> {/* Vertical Divider */}
+
+          {/* Event-Aware Mode */}
           <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-200 transition-all hover:shadow-md">
             <span className="text-sm font-bold text-gray-700">Event-Aware Mode</span>
             <button 
@@ -213,14 +259,18 @@ export default function Dashboard() {
               {isEventMode ? "Scanning 2x Faster" : "Standard"}
             </span>
           </div>
-          <span className="text-red-500 font-bold text-sm flex items-center gap-2 bg-red-50 px-3 py-1 rounded-full border border-red-100">
+
+          {/* System Live Badge */}
+          <span className="text-red-500 font-bold text-sm flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-full border border-red-100">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping absolute"></span>
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 relative z-10"></span>
             SYSTEM LIVE
           </span>
+
         </div>
       </div>
 
+      {/* STATS */}
       <div className="grid grid-cols-3 gap-6 mb-8">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
           <p className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Live Alerts Today</p>
@@ -236,7 +286,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* PROPAGATION GRAPH CODE (Unchanged) */}
+      {/* PROPAGATION GRAPH */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-gray-800">Cross-Platform Traceability Graph</h2>
@@ -336,7 +386,7 @@ export default function Dashboard() {
                     )}
 
                     <div className="flex items-center justify-between mt-4">
-                      {/* 🔥 NEW: Interactive Action Button */}
+                      {/* Action Button */}
                       <button 
                         onClick={() => alert.response.includes("TAKEDOWN") ? handleGenerateTakedown(alert) : null}
                         disabled={!alert.response.includes("TAKEDOWN")}
@@ -368,7 +418,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* RIGHT PANEL CODE (Unchanged) */}
+        {/* RIGHT PANEL */}
         <div className="space-y-6">
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
             <h2 className="text-md font-bold text-gray-800 mb-3">Live Geographic Heatmap</h2>
@@ -410,7 +460,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 🔥 NEW: TAKEDOWN GENERATOR MODAL */}
+      {/* TAKEDOWN GENERATOR MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in duration-200">
           <div className="bg-white w-[800px] max-h-[85vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-200">
@@ -418,7 +468,7 @@ export default function Dashboard() {
             <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
                 <span className="bg-purple-100 p-2 rounded-lg">
-                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                 </span>
                 <div>
                   <h3 className="font-bold text-gray-900">Legal Action Center</h3>
