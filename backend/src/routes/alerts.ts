@@ -13,6 +13,7 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+// Fetch Alerts Feed
 router.get("/alerts", async (req, res) => {
   try {
     const snapshot = await db
@@ -40,8 +41,8 @@ router.get("/alerts", async (req, res) => {
         region: data.region || "unknown",
         status: data.status || "UNKNOWN",
         source: data.source || "unknown",
-        response: data.response || "No action",   // 🔥 NEW
-        level: data.level || "UNKNOWN",           // 🔥 NEW
+        response: data.response || "No action",   
+        level: data.level || "UNKNOWN",           
         timestamp: formattedTimestamp,
       };
     });
@@ -50,6 +51,32 @@ router.get("/alerts", async (req, res) => {
   } catch (error) {
     console.error("❌ Error fetching alerts:", error);
     res.status(500).json({ error: "Failed to fetch alerts" });
+  }
+});
+
+// 🔥 NEW: Fetch Propagation Tracking Data for the UI Graph
+router.get("/propagation", async (req, res) => {
+  try {
+    const snapshot = await db
+      .collection("propagation_links")
+      .orderBy("timestamp", "desc")
+      .limit(10)
+      .get();
+
+    const links = snapshot.docs.map((doc: any) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        parent_id: data.parent_id || "unknown",
+        child_id: data.child_id || "unknown",
+        similarity: data.similarity || 0,
+      };
+    });
+
+    res.json(links);
+  } catch (error) {
+    console.error("❌ Error fetching propagation links:", error);
+    res.status(500).json({ error: "Failed to fetch propagation links" });
   }
 });
 
