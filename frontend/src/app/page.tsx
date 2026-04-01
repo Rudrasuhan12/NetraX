@@ -16,6 +16,7 @@ interface Alert {
   timestamp: string;
   video_id: string;
   confidence: number;
+  embedding_score?: number; // 🔥 NEW: Added embedding score
   risk_score: number;
   region: string;
   response: string;
@@ -229,11 +230,30 @@ export default function Dashboard() {
                       <span className="font-bold text-gray-800">{alert.source}</span>
                       <span className="text-xs text-gray-500 font-medium">{new Date(alert.timestamp).toLocaleTimeString()}</span>
                     </div>
-                    <p className="text-gray-700 text-sm mb-1">🎬 {alert.video_id}</p>
-                    <p className="text-sm text-gray-500 mb-2">🌍 {alert.region} | 📊 {alert.confidence}%</p>
-                    <p className="text-sm text-blue-600 font-medium">⚡ {alert.response}</p>
+                    <p className="text-gray-700 text-sm mb-2">🎬 {alert.video_id}</p>
+                    
+                    {/* 🔥 NEW: Hybrid 2-Stage Verification Display */}
+                    <div className="flex items-center gap-4 mb-2 bg-gray-50 p-2 rounded border border-gray-100">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase">Stage 1: pHash</span>
+                        <span className="text-sm font-semibold text-gray-600">⚡ {alert.confidence}%</span>
+                      </div>
+                      <div className="text-gray-300">→</div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-purple-500 font-bold uppercase">Stage 2: AI Embedding</span>
+                        <span className="text-sm font-bold text-purple-700">🧠 {alert.embedding_score || 'N/A'}%</span>
+                      </div>
+                      <div className="ml-auto text-xs text-gray-500 font-medium">🌍 {alert.region}</div>
+                    </div>
+
+                    <p className="text-sm text-blue-600 font-medium mt-3">⚡ {alert.response}</p>
                     <p className={`text-xs mt-1 font-bold ${getLevelColor(alert.level)}`}>Level: {alert.level}</p>
+                    
                     <div className="mt-3">
+                      <div className="flex justify-between text-[10px] text-gray-400 mb-1 font-bold uppercase">
+                        <span>Risk Assessment</span>
+                        <span>{alert.risk_score}%</span>
+                      </div>
                       <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
                         <div className={`${getRiskColor(alert.risk_score)} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${alert.risk_score}%` }}></div>
                       </div>
