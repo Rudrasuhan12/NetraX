@@ -61,7 +61,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const alertRes = await fetch("http://localhost:5000/api/alerts");
+        const alertRes = await fetch("https://netrax-backend.onrender.com/api/alerts");
         if (alertRes.ok) {
           const alertData = await alertRes.json();
           
@@ -85,7 +85,7 @@ export default function Dashboard() {
           setRegionData(Object.keys(counts).map((key) => ({ region: key, count: counts[key] })));
         }
 
-        const propRes = await fetch("http://localhost:5000/api/propagation");
+        const propRes = await fetch("https://netrax-backend.onrender.com/api/propagation");
         if (propRes.ok) {
           const propData = await propRes.json();
           setPropagationLinks(propData);
@@ -112,7 +112,7 @@ export default function Dashboard() {
     setTakedownText("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/generate-takedown", {
+      const response = await fetch("https://netrax-backend.onrender.com/api/generate-takedown", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -140,7 +140,7 @@ export default function Dashboard() {
   const handleTriggerScan = async () => {
     setIsScanning(true);
     try {
-      await fetch("http://localhost:5000/api/trigger-scan", { 
+      await fetch("https://netrax-backend.onrender.com/api/trigger-scan", { 
         method: "POST"
       });
     } catch (err) {
