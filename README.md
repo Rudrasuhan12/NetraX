@@ -1284,15 +1284,36 @@ copies of the Software...
 
 ## 👥 Contributors
 
-Built by the NetraX team for the Google Solution Challenge Hackathon 2026:
+This project is built and maintained by:
 
-| Name | Role | GitHub |
-|------|------|--------|
-| **Rudranarayan Ray** | Full-Stack, AI/ML | [@rudra62](https://github.com/Rudrasuhan12) |
-| **Your Name** | Backend/DevOps | [@yourname](https://github.com/yourname) |
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/Rudrasuhan12">
+        <img src="https://github.com/rudra62.png" width="100px;" alt="Rudranarayan Ray"/>
+        <br />
+        <sub><b>Rudranarayan Ray</b></sub>
+      </a>
+      <br />
+      💻 📖 🎨 🤔
+    </td>
+    <td align="center">
+      <a href="https://github.com/Sambit-Kumar-Mohanty-26">
+        <img src="https://github.com/Sambit-Kumar-Mohanty-26.png" width="100px;" alt="Sambit Kumar Mohanty"/>
+        <br />
+        <sub><b>Sambit Kumar Mohanty</b></sub>
+      </a>
+      <br />
+      💻 📖 🎨
+    </td>
+  </tr>
+</table>
 
----
-
+**Contribution Key:**
+- 💻 Code
+- 📖 Documentation
+- 🎨 Design
+- 🤔 Ideas & Planning
 ## 🔍 FAQ
 
 **Q: Why only Reddit live?**  
@@ -1370,7 +1391,7 @@ A: Yes—Firestore encryption at rest, HTTPS in transit, no third-party data sha
 
 **Feature Requests:** [Discussions](https://github.com/rudra62/NetraX/discussions)
 
-**Email:** rudra62@example.com
+**Email:** rudranarayanray62@gmail.com
 
 ---
 
@@ -1400,4 +1421,4 @@ A: Yes—Firestore encryption at rest, HTTPS in transit, no third-party data sha
 🍴 **Fork to create your own version**  
 🐛 **Report issues to help improve the project**
 
-[View on GitHub](https://github.com/rudra62/NetraX) | [Live Demo](https://netrax-frontend.vercel.app)
+[View on GitHub](https://github.com/Rudrasuhan12/NetraX?tab=readme-ov-file) | [Live Demo](https://netrax-taupe.vercel.app/)
