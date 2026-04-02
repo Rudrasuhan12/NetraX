@@ -95,26 +95,27 @@ Traditional watermarking fails because:
 - Cosine similarity scoring (0-1 range, normalized to 0-100%)
 - **Use case:** Detects edited versions, reframed content, similar scenes
 
-#### Stage 3: Generative AI Classification (Gemini 2.5 Flash)
-- Misuse categorization with context understanding:
+#### Stage 3: Generative AI Classification (Gemini 2.5 Flash Vision)
+- Real Gemini Vision frame analysis with context understanding:
   - **Raw Broadcast Piracy** (1.15x risk multiplier) - Direct unauthorized republish
   - **Meme/Fan Edit** (0.8x risk multiplier) - Transformative, fair use likely
   - **Deepfake/AI Alteration** (1.3x risk multiplier) - Extreme risk, fraudulent
   - **Fair Use News** (0.05x risk multiplier) - Educational, permitted
+- Deepfake detection pipeline combines **MediaPipe** facial landmarks + **DeepFace** verification signals
 - Intent analysis for legal decision-making
-- **Use case:** Distinguishes piracy from legitimate transformations
+- **Use case:** Distinguishes piracy from legitimate transformations and flags AI-manipulated faces
 
 ### 🌍 **Multi-Platform Scraping**
 
 | Platform | Status | Type | Purpose |
 |----------|--------|------|---------|
 | **Reddit** | ✅ Live | Real-time API scraping | Proof of concept for event-driven ingestion |
-| **YouTube Shorts** | ⚠️ Simulated | Event simulation | Demonstrates multi-platform architecture |
-| **Twitch** | ⚠️ Simulated | Event simulation | Extensible for future implementation |
+| **YouTube Shorts** | ✅ Live | Real API scraper | Live Shorts ingestion via production backend scraper |
+| **Twitch** | ✅ Live | Real API scraper | Live stream clip/event ingestion via production backend scraper |
 | **Custom Sources** | ✅ Via Pub/Sub | Webhook integration | Accept any source via message queue |
 
 **Why live Reddit?** Shows scalable, sustainable scraping without rate limit abuse.  
-**Why simulated others?** Proves platform-agnostic architecture—real scrapers can plug in with zero AI code changes.
+**YouTube/Twitch now live:** Production API scrapers run through the same platform-agnostic pipeline with zero AI code changes.
 
 ### 📊 **Real-Time Dashboard**
 
@@ -125,15 +126,18 @@ Traditional watermarking fails because:
 - **Live Scan Simulator:** Demo mode for presentations
 - **Polling Interval:** Configurable (2.5s standard | 1s event-aware mode)
 - **Sound Alerts:** Audio notifications for CRITICAL detections
+- **Transport Layer:** WebSocket real-time alert streaming with automatic polling fallback
 
 ### 🤖 **Automated Legal Response**
 
 - **DMCA Generation:** Gemini 2.5 Flash generates professional takedown notices
 - **Smart Triggers:** Auto-generate for risk_score > 85% + high-confidence piracy
 - **Template System:** Customizable legal language for different jurisdictions
-- **Email Delivery:** (Phase 2) Automated dispatch to platform abuse teams
+- **Email Delivery:** Implemented backend module sends critical-alert notifications automatically
 
 ### 📈 **Content Tracking & Analytics**
+
+- **Video Ingestion API:** Implemented backend ingest routes accept videos/metadata and feed the detection pipeline
 
 Track how content is:
 - ✅ **Copied exactly** (pHash match)
