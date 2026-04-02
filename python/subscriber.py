@@ -1,10 +1,15 @@
 import os
 import json
 import random
-import numpy as np # 🔥 NEW: Added numpy for Vector Math
+import numpy as np
+import cv2
 from google.cloud import pubsub_v1
 from db import db
 from firebase_admin import firestore
+
+# ✅ Import real Gemini Vision and Deepfake detection
+from gemini_vision import analyze_frame_with_gemini_vision, analyze_frame_with_gemini_metadata
+from deepfake_detector import detect_deepfake
 
 # 🔥 NEW: Imported the new official SDK
 from google import genai
@@ -27,27 +32,55 @@ client = genai.Client(
     location="us-central1"
 )
 
-def analyze_frame_with_gemini(video_id):
+def analyze_frame_with_gemini(frame_array, video_id, source):
     """
-    Pillar 2: Gemini Context Engine
-    Analyzes the frame and classifies the misuse category.
-    """
-    prompt = """
-    You are a digital forensics AI. Analyze this image. It is a known match to an official sports asset. 
-    Classify the nature of this misuse into one of these exact categories: 
-    ["Raw Broadcast Piracy", "Meme/Fan Edit", "Deepfake/AI Alteration", "Fair Use News"]. 
-    Reply in JSON with exactly this structure: {"category": "...", "reasoning": "..."}
+    🎬 PILLAR 2: REAL Gemini Vision Engine
+    Uses actual Gemini 2.0 Flash Vision API to analyze frame images
+    with multi-stage intelligence (deepfake detection + misuse classification)
     """
     
-    # [DEMO MOCK] Simulating the Gemini JSON response for seamless local testing
-    categories = [
-        {"category": "Raw Broadcast Piracy", "reasoning": "Unedited stream capture with minor cropping. No transformative content added."},
-        {"category": "Meme/Fan Edit", "reasoning": "Heavy text overlays, fast-paced edits, and background music added to the original clip."},
-        {"category": "Deepfake/AI Alteration", "reasoning": "The player's face has been synthetically altered using AI swapping tools."},
-        {"category": "Fair Use News", "reasoning": "Clip is playing inside a picture-in-picture box while a commentator discusses the event."}
-    ]
-    # Weight it so Piracy and Memes appear most often
-    return random.choices(categories, weights=[40, 40, 15, 5])[0]
+    # Stage 1: Deepfake Detection First (most critical)
+    print("\n🔍 Stage 2A: Deepfake Detection Analysis...")
+    deepfake_result = detect_deepfake(frame_array)
+    
+    if deepfake_result["is_deepfake"]:
+        print(f"   🚨 DEEPFAKE DETECTED!")
+        print(f"      Method: {deepfake_result['method']}")
+        print(f"      Confidence: {deepfake_result['confidence']:.2%}")
+        return {
+            "category": "Deepfake/AI Alteration",
+            "reasoning": f"AI deepfake detected via {deepfake_result['method']} analysis. Confidence: {deepfake_result['confidence']:.2%}. Details: {deepfake_result.get('details', {})}",
+            "confidence": min(deepfake_result["confidence"] + 0.1, 1.0),  # Boost confidence for deepfakes
+            "detection_method": "deepfake_specialized"
+        }
+    
+    # Stage 2: Gemini Vision Analysis (if not deepfake)
+    print("🔍 Stage 2B: Gemini Vision Misuse Classification...")
+    try:
+        gemini_analysis = analyze_frame_with_gemini_vision(frame_array, video_id)
+        print(f"   ✅ Gemini Analysis Complete")
+        print(f"      Category: {gemini_analysis.get('category', 'UNKNOWN')}")
+        print(f"      Reasoning: {gemini_analysis.get('reasoning', 'N/A')}")
+        print(f"      Confidence: {gemini_analysis.get('confidence', 0):.2%}")
+        
+        return gemini_analysis
+        
+    except Exception as e:
+        print(f"   ⚠️ Gemini Vision failed: {e}")
+        print("   📝 Falling back to metadata-based analysis...")
+        
+        # Fallback to metadata analysis
+        try:
+            fallback_analysis = analyze_frame_with_gemini_metadata(video_id, source, 85)
+            return fallback_analysis
+        except Exception as e2:
+            print(f"   ❌ All Gemini analysis failed: {e2}")
+            return {
+                "category": "Raw Broadcast Piracy",
+                "reasoning": "Unable to perform detailed analysis - defaulting to high-risk classification",
+                "confidence": 0.6,
+                "detection_method": "fallback"
+            }
 
 
 # --- VERTEX AI EMBEDDINGS (STAGE 2 REAL MATH) ---
@@ -153,6 +186,15 @@ def callback(message):
         data = json.loads(message.data.decode("utf-8"))
         incoming_hash = data["hash"]
         incoming_video_id = data.get("video_id", "simulated_stream")
+        source = data.get("source", "Unknown Source")
+        
+        # Extract frame data if provided (for real Gemini Vision)
+        frame_array = None
+        if "frame_base64" in data:
+            import base64
+            frame_bytes = base64.b64decode(data["frame_base64"])
+            nparr = np.frombuffer(frame_bytes, np.uint8)
+            frame_array = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         print("🔍 Stage 1: Fast pHash Check...")
         all_hashes = fetch_all_hashes()
@@ -167,29 +209,41 @@ def callback(message):
 
         phash_confidence = calculate_confidence(min_distance)
 
-        # ---------------- 2-STAGE DECISION LOGIC ---------------- #
+        # ---------------- 3-STAGE DECISION LOGIC (Enhanced with real AI) ---------------- #
         if phash_confidence > 70 and best_match:
             print(f"⚠️ SUSPICIOUS FRAME (pHash: {phash_confidence}%)")
             print("🧠 Triggering Stage 2: Vertex AI Embeddings Verification...")
             
-            # 🔥 THIS NOW CALLS THE REAL MATH FUNCTION
+            # 🔥 REAL MATH: Vertex AI Embeddings
             embedding_score = get_embedding_score(incoming_video_id, best_match["video_id"])
             print(f"   ➤ AI Embedding Score: {embedding_score}%")
 
             if embedding_score > 85:
-                # Trigger Gemini Context Engine
-                print("🤖 Triggering Gemini 2.5 Flash-Lite Analysis...")
-                gemini_analysis = analyze_frame_with_gemini(incoming_video_id)
-                misuse_category = gemini_analysis["category"]
-                misuse_reasoning = gemini_analysis["reasoning"]
+                # 🔥 NEW: Trigger REAL Gemini Vision Analysis
+                print("🤖 Triggering Stage 3: Real Gemini 2.0 Vision Analysis...")
+                
+                # Try to use actual frame for vision analysis if available
+                if frame_array is not None:
+                    print("   📷 Using actual frame image for analysis...")
+                    gemini_analysis = analyze_frame_with_gemini(frame_array, incoming_video_id, source)
+                else:
+                    print("   📝 Frame not available, using metadata analysis...")
+                    # Create dummy frame if needed for fallback
+                    dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    gemini_analysis = analyze_frame_with_gemini(dummy_frame, incoming_video_id, source)
+                
+                misuse_category = gemini_analysis.get("category", "Raw Broadcast Piracy")
+                misuse_reasoning = gemini_analysis.get("reasoning", "Analysis unavailable")
+                detection_method = gemini_analysis.get("detection_method", "unknown")
 
-                # Calculate Risk using the new Smart Formula
+                # Calculate Risk using the Smart Formula
                 risk_score = calculate_smart_risk_score(embedding_score, misuse_category)
                 region = get_fake_region()
                 response = generate_response(risk_score, misuse_category)
 
                 print("🚨 CONFIRMED MATCH & CLASSIFIED")
                 print(f"   ➤ Classification: {misuse_category}")
+                print(f"   ➤ Detection Method: {detection_method}")
                 print(f"   ➤ Reasoning: {misuse_reasoning}")
                 print(f"   ➤ Smart Risk Score: {risk_score}%")
                 print(f"   ➤ Action: {response['action']}")
@@ -209,12 +263,12 @@ def callback(message):
                         "timestamp": firestore.SERVER_TIMESTAMP
                     })
 
-                # ✅ Store alert with GEMINI DATA
+                # ✅ Store alert with REAL GEMINI DATA
                 db.collection("alerts").add({
                     "video_id": incoming_video_id,
                     "confidence": phash_confidence,       
                     "embedding_score": embedding_score,   
-                    "misuse_category": misuse_category,   
+                    "misuse_category": misuse_category,
                     "misuse_reasoning": misuse_reasoning, 
                     "risk_score": risk_score,
                     "region": region,

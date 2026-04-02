@@ -1,15 +1,28 @@
 import express from "express";
 import admin from "firebase-admin";
 import path from "path";
+import fs from "fs";
 import { GoogleGenAI } from "@google/genai"; // 🔥 NEW: Unified Google Gen AI SDK
 
 const router = express.Router();
 
-// Load your existing Google Cloud Service Account
-const serviceAccount = require("../../serviceAccountKey.json");
+// Load Firebase credentials - supports multiple sources
+let serviceAccount: any;
 
-// Tell the Google Cloud SDK exactly where to find your credentials
-process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(__dirname, "../../serviceAccountKey.json");
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // Option 1: Environment variable (JSON string)
+  console.log("🔐 Loading Firebase credentials from environment variable");
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else if (fs.existsSync("/etc/secrets/serviceAccountKey.json")) {
+  // Option 2: Render Secret File
+  console.log("🔐 Loading Firebase credentials from Render secret file");
+  serviceAccount = JSON.parse(fs.readFileSync("/etc/secrets/serviceAccountKey.json", "utf8"));
+} else {
+  // Option 3: Local development file
+  console.log("🔐 Loading Firebase credentials from local serviceAccountKey.json");
+  serviceAccount = require("../../serviceAccountKey.json");
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(__dirname, "../../serviceAccountKey.json");
+}
 
 if (!admin.apps.length) {
   admin.initializeApp({

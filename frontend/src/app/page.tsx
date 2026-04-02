@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { io, Socket } from "socket.io-client";
 
 interface Alert {
   id: string;
@@ -29,6 +30,7 @@ export default function Dashboard() {
   const [propagationLinks, setPropagationLinks] = useState<PropagationLink[]>([]);
   const [regionData, setRegionData] = useState<any[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
   
   // Polish States
   const [isEventMode, setIsEventMode] = useState(false); 
@@ -45,6 +47,28 @@ export default function Dashboard() {
 
   const soundEnabledRef = useRef(false);
   const lastAlertIdRef = useRef<string | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  
+  // Smart backend URL detection (local dev vs production)
+  const getBackendUrl = () => {
+    // Priority 1: Environment variable
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      return process.env.NEXT_PUBLIC_BACKEND_URL;
+    }
+    
+    // Priority 2: Auto-detect based on window location
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:5000';
+      }
+    }
+    
+    // Priority 3: Default to production
+    return 'https://netrax-backend.onrender.com';
+  };
+  
+  const backendUrl = getBackendUrl();
 
   // Sound enablement click listener
   useEffect(() => {
@@ -57,11 +81,74 @@ export default function Dashboard() {
     return () => window.removeEventListener("click", enableSound);
   }, []);
 
-  // Fetch Data Logic
+  // WebSocket Connection Setup 🔥 NEW
+  useEffect(() => {
+    console.log(`🔌 Connecting to backend: ${backendUrl}`);
+    
+    // Initialize Socket.IO connection
+    socketRef.current = io(backendUrl, {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5
+    });
+
+    socketRef.current.on('connect', () => {
+      console.log("✅ WebSocket connected");
+      setIsWebSocketConnected(true);
+      
+      // Subscribe to real-time alerts
+      socketRef.current?.emit('subscribe-alerts');
+    });
+
+    socketRef.current.on('disconnect', () => {
+      console.log("❌ WebSocket disconnected");
+      setIsWebSocketConnected(false);
+    });
+
+    // Listen for new alerts from server
+    socketRef.current.on('new-alert', (alert: Alert) => {
+      console.log("📨 Real-time alert received:", alert.video_id);
+      
+      // Add to alerts list (prepend)
+      setAlerts((prevAlerts) => {
+        const updatedAlerts = [alert, ...prevAlerts].slice(0, 20); // Keep last 20
+        
+        // Play sound for CRITICAL alerts
+        if (alert.level === "CRITICAL" && soundEnabledRef.current) {
+          const audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+          audio.play().catch(() => {});
+        }
+        
+        // Browser notification for CRITICAL
+        if (alert.level === "CRITICAL" && Notification.permission === "granted") {
+          new Notification("🚨 NetraX Critical Alert", {
+            body: `${alert.source}: ${alert.misuse_category} (Risk: ${alert.risk_score}%)`,
+            icon: "/logo.png",
+            badge: "/badge.png",
+            tag: "critical-alert"
+          });
+        }
+        
+        return updatedAlerts;
+      });
+    });
+
+    // Request notification permission
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    return () => {
+      socketRef.current?.disconnect();
+    };
+  }, []);
+
+  // Fetch Data Logic (Polling as backup)
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const alertRes = await fetch("https://netrax-backend.onrender.com/api/alerts");
+        const alertRes = await fetch(`${backendUrl}/api/alerts`);
         if (alertRes.ok) {
           const alertData = await alertRes.json();
           
@@ -85,7 +172,7 @@ export default function Dashboard() {
           setRegionData(Object.keys(counts).map((key) => ({ region: key, count: counts[key] })));
         }
 
-        const propRes = await fetch("https://netrax-backend.onrender.com/api/propagation");
+        const propRes = await fetch(`${backendUrl}/api/propagation`);
         if (propRes.ok) {
           const propData = await propRes.json();
           setPropagationLinks(propData);
@@ -112,7 +199,7 @@ export default function Dashboard() {
     setTakedownText("");
 
     try {
-      const response = await fetch("https://netrax-backend.onrender.com/api/generate-takedown", {
+      const response = await fetch(`${backendUrl}/api/generate-takedown`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -140,7 +227,7 @@ export default function Dashboard() {
   const handleTriggerScan = async () => {
     setIsScanning(true);
     try {
-      await fetch("https://netrax-backend.onrender.com/api/trigger-scan", { 
+      await fetch(`${backendUrl}/api/trigger-scan`, {
         method: "POST"
       });
     } catch (err) {
@@ -260,11 +347,15 @@ export default function Dashboard() {
             </span>
           </div>
 
-          {/* System Live Badge */}
-          <span className="text-red-500 font-bold text-sm flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-full border border-red-100">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping absolute"></span>
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 relative z-10"></span>
-            SYSTEM LIVE
+          {/* System Live Badge - WebSocket Status */}
+          <span className={`font-bold text-sm flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
+            isWebSocketConnected 
+              ? 'text-green-600 bg-green-50 border-green-100' 
+              : 'text-orange-600 bg-orange-50 border-orange-100'
+          }`}>
+            <span className={`w-2.5 h-2.5 rounded-full ${isWebSocketConnected ? 'bg-green-600 animate-pulse' : 'bg-orange-600 animate-ping'} absolute`}></span>
+            <span className={`w-2.5 h-2.5 rounded-full ${isWebSocketConnected ? 'bg-green-600' : 'bg-orange-600'} relative z-10`}></span>
+            {isWebSocketConnected ? 'LIVE STREAMING' : 'CONNECTING'}
           </span>
 
         </div>

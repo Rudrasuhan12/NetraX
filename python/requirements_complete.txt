@@ -1,0 +1,26 @@
+# Complete Python Dependencies for NetraX
+# Install with: pip install -r requirements_complete.txt
+
+# ====== ORIGINAL DEPENDENCIES ======
+ImageHash==4.3.2
+numpy==2.4.3
+opencv-python==4.13.0.92
+pillow==12.1.1
+PyWavelets==1.9.0
+scipy==1.17.1
+google-cloud-pubsub==2.19.0
+firebase-admin==6.4.0
+requests==2.32.3
+
+# ====== NEW DEPENDENCIES (Critical Improvements) ======
+
+# Feature 1: Real Gemini Vision API + Deepfake Detection
+google-generativeai==0.6.0    # Gemini Vision API
+mediapipe>=0.10.30            # Face mesh analysis for deepfakes (Python 3.13 compatible)
+deepface>=0.0.79              # Emotion analysis for deepfakes
+tf-keras>=2.15.0              # Required by DeepFace
+tensorflow>=2.15.0            # Required by MediaPipe/DeepFace
+
+# Feature 2: Real Platform Scraping
+google-api-python-client>=2.108.0  # YouTube Data API
+praw>=7.7.0                        # Reddit API (already implemented)
