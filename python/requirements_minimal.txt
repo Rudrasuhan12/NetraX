@@ -1,9 +1,0 @@
-# Minimal requirements - Only NEW packages needed for AI features
-# Install with: pip install -r requirements_minimal.txt
-
-# These are the ONLY packages you need to add (others are already installed)
-google-generativeai>=0.6.0
-mediapipe>=0.10.30
-deepface>=0.0.79
-tensorflow>=2.15.0
-tf-keras>=2.15.0
