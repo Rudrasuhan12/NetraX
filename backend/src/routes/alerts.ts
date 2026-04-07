@@ -8,15 +8,23 @@ const router = express.Router();
 
 // Load Firebase credentials - supports multiple sources
 let serviceAccount: any;
+let credentialPath: string | undefined;
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   // Option 1: Environment variable (JSON string)
   console.log("🔐 Loading Firebase credentials from environment variable");
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  
+  // Write credentials to a temporary file for Vertex AI to use
+  const tmpPath = "/tmp/serviceAccountKey.json";
+  fs.writeFileSync(tmpPath, JSON.stringify(serviceAccount));
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = tmpPath;
+  console.log("✅ Set GOOGLE_APPLICATION_CREDENTIALS for Vertex AI");
 } else if (fs.existsSync("/etc/secrets/serviceAccountKey.json")) {
   // Option 2: Render Secret File
   console.log("🔐 Loading Firebase credentials from Render secret file");
   serviceAccount = JSON.parse(fs.readFileSync("/etc/secrets/serviceAccountKey.json", "utf8"));
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = "/etc/secrets/serviceAccountKey.json";
 } else {
   // Option 3: Local development file
   console.log("🔐 Loading Firebase credentials from local serviceAccountKey.json");
@@ -33,6 +41,7 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // 🔥 NEW: Initialize the unified GenAI SDK for Vertex AI using your GCP Project ID
+// The SDK will use GOOGLE_APPLICATION_CREDENTIALS automatically when available
 const ai = new GoogleGenAI({
   vertexai: true,
   project: serviceAccount.project_id,
@@ -124,6 +133,7 @@ router.post("/generate-takedown", async (req, res) => {
     `;
 
     console.log(`🤖 Generating Takedown via Vertex AI for ${source} (${video_id})...`);
+    console.log(`📍 Using project: ${serviceAccount.project_id}, location: us-central1`);
     
     // Use the new SDK generation method with Gemini 2.5 Flash
     const response = await ai.models.generateContent({
@@ -136,9 +146,14 @@ router.post("/generate-takedown", async (req, res) => {
     console.log("✅ Takedown Notice Generated Successfully!");
 
     res.json({ takedown_notice: takedownText });
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error generating takedown via Vertex AI:", error);
-    res.status(500).json({ error: "Failed to generate takedown notice." });
+    console.error("❌ Error details:", error?.message || error);
+    console.error("❌ Error stack:", error?.stack);
+    res.status(500).json({ 
+      error: "Failed to connect to Vertex AI API.",
+      details: error?.message || "Unknown error"
+    });
   }
 });
 
