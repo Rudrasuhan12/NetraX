@@ -7,6 +7,7 @@ import os
 import json
 import requests
 import logging
+import tempfile
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 import re
@@ -43,6 +44,17 @@ EXTERNAL_FRAME_LIMIT = int(os.getenv("EXTERNAL_FRAME_LIMIT", "3"))
 YOUTUBE_LOOKBACK_DAYS = int(os.getenv("YOUTUBE_LOOKBACK_DAYS", "365"))
 EXTERNAL_MATCH_THRESHOLD = float(os.getenv("EXTERNAL_MATCH_THRESHOLD", "40"))
 SOCIAL_MATCH_THRESHOLD = float(os.getenv("SOCIAL_MATCH_THRESHOLD", "35"))
+INSTAGRAM_MATCH_THRESHOLD = float(os.getenv("INSTAGRAM_MATCH_THRESHOLD", str(SOCIAL_MATCH_THRESHOLD)))
+SOCIAL_LOOKBACK_DAYS = int(os.getenv("SOCIAL_LOOKBACK_DAYS", "30"))
+X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN", "")
+X_SEARCH_QUERY = os.getenv("X_SEARCH_QUERY", "(nba OR nfl OR mlb OR sports) -is:retweet lang:en")
+X_MAX_RESULTS = int(os.getenv("X_MAX_RESULTS", "15"))
+INSTAGRAM_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
+INSTAGRAM_USER_ID = os.getenv("INSTAGRAM_USER_ID", "")
+INSTAGRAM_MAX_RESULTS = int(os.getenv("INSTAGRAM_MAX_RESULTS", "15"))
+FACEBOOK_ACCESS_TOKEN = os.getenv("FACEBOOK_ACCESS_TOKEN", "")
+FACEBOOK_PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "")
+FACEBOOK_MAX_RESULTS = int(os.getenv("FACEBOOK_MAX_RESULTS", "15"))
 
 # Target channels and subreddits for sports content
 YOUTUBE_CHANNELS = {
@@ -56,6 +68,7 @@ YOUTUBE_CHANNELS = {
 REDDIT_SUBREDDITS = ["sports", "nba", "nfl", "mlb", "CollegeFootball", "soccer"]
 X_SEED_POSTS = os.getenv("X_SEED_POSTS_JSON", "[]")
 INSTAGRAM_SEED_POSTS = os.getenv("INSTAGRAM_SEED_POSTS_JSON", "[]")
+FACEBOOK_SEED_POSTS = os.getenv("FACEBOOK_SEED_POSTS_JSON", "[]")
 TIKTOK_SEED_POSTS = os.getenv("TIKTOK_SEED_POSTS_JSON", "[]")
 
 
@@ -286,9 +299,197 @@ def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        normalized = value.replace('Z', '+00:00')
+        if re.search(r"[+-]\d{4}$", normalized):
+            normalized = f"{normalized[:-2]}:{normalized[-2:]}"
+        return datetime.fromisoformat(normalized)
     except Exception:
         return None
+
+
+def fetch_x_api_posts() -> List[Dict]:
+    """Fetch recent posts from X API v2 (if configured)."""
+    if not X_BEARER_TOKEN:
+        logger.info("🐦 X token not configured - skipping X API and using seeds if available")
+        return []
+
+    url = "https://api.x.com/2/tweets/search/recent"
+    headers = {"Authorization": f"Bearer {X_BEARER_TOKEN}"}
+    params = {
+        "query": X_SEARCH_QUERY,
+        "max_results": min(max(X_MAX_RESULTS, 10), 100),
+        "tweet.fields": "created_at,author_id,attachments",
+        "expansions": "attachments.media_keys,author_id",
+        "media.fields": "url,preview_image_url,type",
+        "user.fields": "username",
+    }
+
+    posts: List[Dict] = []
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        if response.status_code != 200:
+            error_snippet = response.text[:250].replace("\n", " ")
+            logger.warning(f"⚠️ X API request failed ({response.status_code}): {error_snippet}")
+            return []
+        payload = response.json()
+        users = {u.get("id"): u for u in payload.get("includes", {}).get("users", []) if u.get("id")}
+        media_by_key = {m.get("media_key"): m for m in payload.get("includes", {}).get("media", []) if m.get("media_key")}
+
+        for item in payload.get("data", []):
+            tweet_id = str(item.get("id", ""))
+            if not tweet_id:
+                continue
+            author = users.get(item.get("author_id"), {}).get("username", "unknown")
+            attachments = item.get("attachments", {})
+            media_keys = attachments.get("media_keys", [])
+            media_obj = media_by_key.get(media_keys[0]) if media_keys else {}
+            thumbnail_url = media_obj.get("preview_image_url") or media_obj.get("url") or ""
+            posts.append({
+                "platform": "X",
+                "external_id": tweet_id,
+                "title": str(item.get("text", ""))[:280],
+                "author": author,
+                "url": f"https://x.com/{author}/status/{tweet_id}" if author else f"https://x.com/i/web/status/{tweet_id}",
+                "published_at": str(item.get("created_at", "")),
+                "thumbnail_url": thumbnail_url,
+            })
+    except Exception as e:
+        logger.warning(f"⚠️ X API fetch failed: {e}")
+        return []
+
+    return posts
+
+
+def fetch_instagram_api_posts() -> List[Dict]:
+    """Fetch recent media from Instagram Graph API (if configured)."""
+    if not INSTAGRAM_ACCESS_TOKEN or not INSTAGRAM_USER_ID:
+        logger.info("📸 Instagram credentials not configured - skipping API and using seeds if available")
+        return []
+
+    url = f"https://graph.facebook.com/v21.0/{INSTAGRAM_USER_ID}/media"
+    params = {
+        "fields": "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,username",
+        "limit": min(max(INSTAGRAM_MAX_RESULTS, 5), 50),
+        "access_token": INSTAGRAM_ACCESS_TOKEN,
+    }
+
+    posts: List[Dict] = []
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code != 200:
+            error_snippet = response.text[:250].replace("\n", " ")
+            logger.warning(f"⚠️ Instagram API request failed ({response.status_code}): {error_snippet}")
+            return []
+        payload = response.json()
+        for item in payload.get("data", []):
+            post_id = str(item.get("id", ""))
+            if not post_id:
+                continue
+            posts.append({
+                "platform": "Instagram",
+                "external_id": post_id,
+                "title": str(item.get("caption", ""))[:280],
+                "author": str(item.get("username", "instagram")),
+                "url": str(item.get("permalink", "")),
+                "published_at": str(item.get("timestamp", "")),
+                "media_url": str(item.get("media_url", "")),
+                "thumbnail_url": str(item.get("thumbnail_url") or item.get("media_url") or ""),
+            })
+    except Exception as e:
+        logger.warning(f"⚠️ Instagram API fetch failed: {e}")
+        return []
+
+    return posts
+
+
+def fetch_facebook_api_posts() -> List[Dict]:
+    """Fetch recent public posts from Facebook Graph API (if configured)."""
+    if not FACEBOOK_ACCESS_TOKEN or not FACEBOOK_PAGE_ID:
+        logger.info("📘 Facebook credentials not configured - skipping API and using seeds if available")
+        return []
+
+    url = f"https://graph.facebook.com/v21.0/{FACEBOOK_PAGE_ID}/posts"
+    params = {
+        "fields": "id,message,created_time,permalink_url,full_picture",
+        "limit": min(max(FACEBOOK_MAX_RESULTS, 5), 50),
+        "access_token": FACEBOOK_ACCESS_TOKEN,
+    }
+
+    posts: List[Dict] = []
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code != 200:
+            error_snippet = response.text[:250].replace("\n", " ")
+            logger.warning(f"⚠️ Facebook API request failed ({response.status_code}): {error_snippet}")
+            return []
+        payload = response.json()
+        for item in payload.get("data", []):
+            post_id = str(item.get("id", ""))
+            if not post_id:
+                continue
+            posts.append({
+                "platform": "Facebook",
+                "external_id": post_id,
+                "title": str(item.get("message", ""))[:280],
+                "author": "facebook",
+                "url": str(item.get("permalink_url", "")),
+                "published_at": str(item.get("created_time", "")),
+                "thumbnail_url": str(item.get("full_picture", "")),
+            })
+    except Exception as e:
+        logger.warning(f"⚠️ Facebook API fetch failed: {e}")
+        return []
+
+    return posts
+
+
+def media_hash_similarity(uploaded_hash: str, media_url: str) -> float:
+    if not media_url:
+        return 0.0
+    try:
+        response = requests.get(media_url, timeout=5)
+        if response.status_code != 200:
+            return 0.0
+        content_type = (response.headers.get("content-type") or "").lower()
+
+        # Handle video URLs (e.g., Instagram reels media_url) by sampling multiple frames.
+        if "video" in content_type or media_url.lower().endswith(".mp4"):
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp:
+                tmp.write(response.content)
+                tmp.flush()
+                cap = cv2.VideoCapture(tmp.name)
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+                sample_points = [0]
+                if frame_count > 3:
+                    sample_points = [0, max(0, frame_count // 3), max(0, (2 * frame_count) // 3)]
+
+                best_similarity = 0.0
+                for point in sample_points:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, point)
+                    ok, frame = cap.read()
+                    if not ok or frame is None:
+                        continue
+                    img_array = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    media_hash = generate_hash(img_array)
+                    if not media_hash:
+                        continue
+                    distance = hamming_distance(uploaded_hash, media_hash)
+                    similarity = max(0.0, 100.0 - (distance * 2.5))
+                    if similarity > best_similarity:
+                        best_similarity = similarity
+                cap.release()
+                return best_similarity
+        else:
+            img = Image.open(BytesIO(response.content))
+            img_array = np.array(img)
+
+        media_hash = generate_hash(img_array)
+        if not media_hash:
+            return 0.0
+        distance = hamming_distance(uploaded_hash, media_hash)
+        return max(0.0, 100.0 - (distance * 2.5))
+    except Exception:
+        return 0.0
 
 
 def resolve_channel_id(youtube, configured_id: str, handle: str) -> Optional[str]:
@@ -555,6 +756,7 @@ def check_all_external_sources(video_frames: List, video_id: str, upload_context
     reddit_matches = []
     x_matches = []
     instagram_matches = []
+    facebook_matches = []
     tiktok_matches = []
     upload_context = upload_context or {
         "upload_title": video_id,
@@ -562,6 +764,31 @@ def check_all_external_sources(video_frames: List, video_id: str, upload_context
     }
     
     logger.info(f"📊 Total frames received: {len(video_frames)}")
+    x_posts = fetch_x_api_posts()
+    if x_posts:
+        logger.info(f"🐦 X API posts fetched: {len(x_posts)}")
+    else:
+        x_posts = parse_seed_posts(X_SEED_POSTS, "X")
+        if x_posts:
+            logger.info(f"🐦 X seed posts loaded: {len(x_posts)}")
+
+    instagram_posts = fetch_instagram_api_posts()
+    if instagram_posts:
+        logger.info(f"📸 Instagram API posts fetched: {len(instagram_posts)}")
+    else:
+        instagram_posts = parse_seed_posts(INSTAGRAM_SEED_POSTS, "Instagram")
+        if instagram_posts:
+            logger.info(f"📸 Instagram seed posts loaded: {len(instagram_posts)}")
+
+    facebook_posts = fetch_facebook_api_posts()
+    if facebook_posts:
+        logger.info(f"📘 Facebook API posts fetched: {len(facebook_posts)}")
+    else:
+        facebook_posts = parse_seed_posts(FACEBOOK_SEED_POSTS, "Facebook")
+        if facebook_posts:
+            logger.info(f"📘 Facebook seed posts loaded: {len(facebook_posts)}")
+
+    tiktok_posts = parse_seed_posts(TIKTOK_SEED_POSTS, "TikTok")
     
     # Analyze multiple early frames to reduce misses when first frame is intro/logo.
     frame_limit = min(max(EXTERNAL_FRAME_LIMIT, 1), len(video_frames))
@@ -597,18 +824,20 @@ def check_all_external_sources(video_frames: List, video_id: str, upload_context
         if reddit_match:
             reddit_matches.extend(reddit_match)
 
-        x_matches.extend(check_seed_social_sources("X", parse_seed_posts(X_SEED_POSTS, "X"), upload_context))
-        instagram_matches.extend(check_seed_social_sources("Instagram", parse_seed_posts(INSTAGRAM_SEED_POSTS, "Instagram"), upload_context))
-        tiktok_matches.extend(check_seed_social_sources("TikTok", parse_seed_posts(TIKTOK_SEED_POSTS, "TikTok"), upload_context))
+        x_matches.extend(check_seed_social_sources("X", x_posts, upload_context, frame_hash))
+        instagram_matches.extend(check_seed_social_sources("Instagram", instagram_posts, upload_context, frame_hash))
+        facebook_matches.extend(check_seed_social_sources("Facebook", facebook_posts, upload_context, frame_hash))
+        tiktok_matches.extend(check_seed_social_sources("TikTok", tiktok_posts, upload_context, frame_hash))
     
     # Deduplicate by URL
     youtube_matches = deduplicate_matches(youtube_matches)
     reddit_matches = deduplicate_matches(reddit_matches)
     x_matches = deduplicate_matches(x_matches)
     instagram_matches = deduplicate_matches(instagram_matches)
+    facebook_matches = deduplicate_matches(facebook_matches)
     tiktok_matches = deduplicate_matches(tiktok_matches)
     
-    total_matches = len(youtube_matches) + len(reddit_matches) + len(x_matches) + len(instagram_matches) + len(tiktok_matches)
+    total_matches = len(youtube_matches) + len(reddit_matches) + len(x_matches) + len(instagram_matches) + len(facebook_matches) + len(tiktok_matches)
     external_piracy = total_matches > 0
     
     print(f"\n{'='*60}")
@@ -618,6 +847,7 @@ def check_all_external_sources(video_frames: List, video_id: str, upload_context
     print(f"   Reddit Matches: {len(reddit_matches)}")
     print(f"   X Matches: {len(x_matches)}")
     print(f"   Instagram Matches: {len(instagram_matches)}")
+    print(f"   Facebook Matches: {len(facebook_matches)}")
     print(f"   TikTok Matches: {len(tiktok_matches)}")
     print(f"   Total External Matches: {total_matches}")
     print(f"   External Piracy Detected: {'🚨 YES' if external_piracy else '✅ NO'}")
@@ -628,6 +858,7 @@ def check_all_external_sources(video_frames: List, video_id: str, upload_context
         "reddit_matches": reddit_matches,
         "x_matches": x_matches,
         "instagram_matches": instagram_matches,
+        "facebook_matches": facebook_matches,
         "tiktok_matches": tiktok_matches,
         "total_external_matches": total_matches,
         "external_piracy_detected": external_piracy,
@@ -635,7 +866,7 @@ def check_all_external_sources(video_frames: List, video_id: str, upload_context
     }
 
 
-def check_seed_social_sources(platform: str, seed_posts: List[Dict], upload_context: Dict) -> List[Dict]:
+def check_seed_social_sources(platform: str, seed_posts: List[Dict], upload_context: Dict, uploaded_hash: Optional[str] = None) -> List[Dict]:
     """
     MVP metadata-only adapters for X/Instagram/TikTok.
     Uses title + temporal + optional embedding proxies for scoring.
@@ -644,14 +875,36 @@ def check_seed_social_sources(platform: str, seed_posts: List[Dict], upload_cont
     upload_title = upload_context.get("upload_title", "")
     upload_time = upload_context.get("uploaded_at")
 
+    platform_threshold = INSTAGRAM_MATCH_THRESHOLD if platform.lower() == "instagram" else SOCIAL_MATCH_THRESHOLD
+
     for item in seed_posts:
         title = item.get("title", "")
         published_at = parse_iso_datetime(item.get("published_at"))
+        now_utc = datetime.now(timezone.utc)
+        if published_at and (now_utc - published_at).days > SOCIAL_LOOKBACK_DAYS:
+            if platform.lower() == "instagram":
+                logger.info(f"      📸 Skipping Instagram post (older than lookback): {title[:60]}")
+            continue
         title_similarity = title_similarity_score(upload_title, title)
         temporal_similarity = temporal_similarity_score(upload_time, published_at)
         embedding_similarity = optional_embedding_similarity(upload_title, title)
-        score = multisignal_score(0.0, title_similarity, temporal_similarity, embedding_similarity)
-        if score < SOCIAL_MATCH_THRESHOLD:
+        # Prefer direct media URL for Instagram reels/videos; fallback to thumbnail.
+        media_probe_url = (
+            item.get("media_url", "") or item.get("thumbnail_url", "")
+            if platform.lower() == "instagram"
+            else item.get("thumbnail_url", "") or item.get("media_url", "")
+        )
+        hash_similarity = media_hash_similarity(uploaded_hash or "", media_probe_url) if uploaded_hash else 0.0
+        score = multisignal_score(hash_similarity, title_similarity, temporal_similarity, embedding_similarity)
+        likely_repost = temporal_similarity >= 95.0 and hash_similarity >= 22.5
+        instagram_repost = platform.lower() == "instagram" and hash_similarity >= 25.0 and temporal_similarity >= 80.0
+        if platform.lower() == "instagram":
+            logger.info(
+                f"         📊 Instagram '{title[:40]}': hash={hash_similarity:.1f}% "
+                f"title={title_similarity:.1f}% time={temporal_similarity:.1f}% score={score:.1f}% "
+                f"(threshold={platform_threshold:.1f})"
+            )
+        if score < platform_threshold and not likely_repost and not instagram_repost:
             continue
         external_id = item.get("external_id", "unknown")
         matches.append({
@@ -661,7 +914,7 @@ def check_seed_social_sources(platform: str, seed_posts: List[Dict], upload_cont
             "author": item.get("author", ""),
             "url": item.get("url", ""),
             "similarity": score,
-            "hash_similarity": 0.0,
+            "hash_similarity": hash_similarity,
             "title_similarity": title_similarity,
             "temporal_similarity": temporal_similarity,
             "embedding_similarity": embedding_similarity,

@@ -91,8 +91,8 @@ def process_uploaded_video(video_path):
         total_frames = len(frames)
         print(f"      ✅ Extracted {total_frames} frames")
         
-        # Step 1.5: Check External Sources (YouTube/Reddit) 🌐 NEW
-        print(f"\n[2/5] 🌐 Checking External Sources (YouTube/Reddit)...")
+        # Step 1.5: Check External Sources (YouTube/Reddit/X/Instagram/Facebook/TikTok)
+        print(f"\n[2/5] 🌐 Checking External Sources (YouTube/Reddit/X/Instagram/Facebook/TikTok)...")
         upload_id = f"upload_{int(datetime.datetime.now().timestamp())}"
         upload_context = {
             "upload_title": os.path.basename(video_path),
@@ -103,8 +103,9 @@ def process_uploaded_video(video_path):
         reddit_matches = external_results.get("reddit_matches", [])
         x_matches = external_results.get("x_matches", [])
         instagram_matches = external_results.get("instagram_matches", [])
+        facebook_matches = external_results.get("facebook_matches", [])
         tiktok_matches = external_results.get("tiktok_matches", [])
-        all_external_matches = youtube_matches + reddit_matches + x_matches + instagram_matches + tiktok_matches
+        all_external_matches = youtube_matches + reddit_matches + x_matches + instagram_matches + facebook_matches + tiktok_matches
         
         # Step 2: Check database for official content
         print(f"\n[3/5] 🔍 Checking local Firestore database...")
@@ -134,6 +135,10 @@ def process_uploaded_video(video_path):
                 print(f"\n[4/5] 🌐 External Piracy Detected!")
                 print(f"      📺 YouTube matches: {len(youtube_matches)}")
                 print(f"      🤖 Reddit matches: {len(reddit_matches)}")
+                print(f"      🐦 X matches: {len(x_matches)}")
+                print(f"      📸 Instagram matches: {len(instagram_matches)}")
+                print(f"      📘 Facebook matches: {len(facebook_matches)}")
+                print(f"      🎵 TikTok matches: {len(tiktok_matches)}")
                 
                 # Create external match alerts
                 for ext_match in all_external_matches[:8]:
@@ -211,6 +216,10 @@ def process_uploaded_video(video_path):
             print(f"\n      🌐 EXTERNAL SOURCES MATCHED!")
             print(f"      📺 YouTube: {len(youtube_matches)} matches")
             print(f"      🤖 Reddit: {len(reddit_matches)} matches")
+            print(f"      🐦 X: {len(x_matches)} matches")
+            print(f"      📸 Instagram: {len(instagram_matches)} matches")
+            print(f"      📘 Facebook: {len(facebook_matches)} matches")
+            print(f"      🎵 TikTok: {len(tiktok_matches)} matches")
             
             # Create external alerts
             for ext_match in all_external_matches[:8]:
@@ -358,8 +367,8 @@ def process_uploaded_video(video_path):
         print(f"   • Local matches found: {len(matches_found)}")
         print(f"   • YouTube matches found: {len(youtube_matches)}")
         print(f"   • Reddit matches found: {len(reddit_matches)}")
-        print(f"   • X/Instagram/TikTok matches found: {len(x_matches) + len(instagram_matches) + len(tiktok_matches)}")
-        print(f"   • Total external sources checked: YouTube + Reddit + X + Instagram + TikTok")
+        print(f"   • X/Instagram/Facebook/TikTok matches found: {len(x_matches) + len(instagram_matches) + len(facebook_matches) + len(tiktok_matches)}")
+        print(f"   • Total external sources checked: YouTube + Reddit + X + Instagram + Facebook + TikTok")
         print(f"   • Alerts created: {len(matches_found) + len(all_external_matches)}")
         print(f"   • Status: {'PIRACY DETECTED ⚠️' if (matches_found or external_results.get('external_piracy_detected')) else 'No issues found ✅'}")
         print(f"{'='*60}")
@@ -377,7 +386,7 @@ def process_uploaded_video(video_path):
 
 def create_external_source_alert(match_data: dict, video_id: str):
     """
-    Create an alert for external source matches (YouTube/Reddit)
+    Create an alert for external source matches (YouTube/Reddit/X/Instagram/Facebook/TikTok)
     
     Args:
         match_data: Match result from external_source_checker
@@ -385,18 +394,29 @@ def create_external_source_alert(match_data: dict, video_id: str):
     """
     try:
         platform = match_data.get("platform", "Unknown")
-        similarity = match_data.get("multi_signal_score", match_data.get("similarity", 0))
+        raw_similarity = match_data.get("multi_signal_score", match_data.get("similarity", 0))
+        try:
+            similarity = float(raw_similarity or 0)
+        except (TypeError, ValueError):
+            similarity = 0.0
+        # Normalize scores that are in 0-1 range to 0-100.
+        if 0 < similarity <= 1:
+            similarity *= 100.0
         
-        # Determine risk based on similarity
+        # Determine alert level based on similarity
         if similarity > 85:
-            risk_score = 95
             alert_type = "HIGH_RISK"
         elif similarity > 70:
-            risk_score = 75
             alert_type = "MEDIUM_RISK"
         else:
-            risk_score = 50
             alert_type = "LOW_RISK"
+        # Dynamic risk score to avoid a fixed floor for all low-risk matches.
+        risk_score = max(30, min(100, round(similarity)))
+        embedding_score = match_data.get("embedding_similarity")
+        if embedding_score is None:
+            embedding_score = match_data.get("vector_similarity")
+        if embedding_score is None:
+            embedding_score = similarity
         
         # Create alert
         alert_data = {
@@ -416,6 +436,7 @@ def create_external_source_alert(match_data: dict, video_id: str):
             "title_similarity": match_data.get("title_similarity"),
             "temporal_similarity": match_data.get("temporal_similarity"),
             "embedding_similarity": match_data.get("embedding_similarity"),
+            "embedding_score": embedding_score,
             "external_metadata": {
                 "title": match_data.get("title", ""),
                 "author": match_data.get("author") or match_data.get("channel", ""),

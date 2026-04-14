@@ -471,7 +471,7 @@ export default function Dashboard() {
 
   const highRisk = alerts.filter((a) => a.risk_score > 80).length;
   const avgConfidence = alerts.length > 0
-      ? Math.round(alerts.reduce((sum, a) => sum + (a.embedding_score || a.confidence), 0) / alerts.length)
+      ? Math.round(alerts.reduce((sum, a) => sum + (a.embedding_score ?? a.confidence), 0) / alerts.length)
       : 0;
 
   const customStyles = `
@@ -825,7 +825,7 @@ export default function Dashboard() {
                       <div className="text-gray-300 font-bold">→</div>
                       <div className="flex flex-col">
                         <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mb-0.5">Stage 2: Vertex AI</span>
-                        <span className="text-sm font-black text-blue-700 flex items-center gap-1">🧠 Embedding: {alert.embedding_score || 'N/A'}%</span>
+                        <span className="text-sm font-black text-blue-700 flex items-center gap-1">🧠 Embedding: {alert.embedding_score ?? 'N/A'}%</span>
                       </div>
                       <div className="ml-auto flex items-center gap-1 text-xs text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded">
                         {alert.platform ? `${alert.platform === 'YouTube' ? '📺' : '🤖'} ${alert.platform}` : `🌍 ${alert.region}`}
