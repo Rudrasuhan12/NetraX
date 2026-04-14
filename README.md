@@ -105,35 +105,34 @@ Traditional watermarking fails because:
 - Intent analysis for legal decision-making
 - **Use case:** Distinguishes piracy from legitimate transformations and flags AI-manipulated faces
 
-### 🌍 **Multi-Platform Scraping**
+### 🌍 **Multi-Platform Detection Coverage**
 
-| Platform | Status | Type | Purpose |
-|----------|--------|------|---------|
-| **Reddit** | ✅ Live | Real-time API scraping | Proof of concept for event-driven ingestion |
-| **YouTube Shorts** | ✅ Live | Real API scraper | Live Shorts ingestion via production backend scraper |
-| **Twitch** | ✅ Live | Real API scraper | Live stream clip/event ingestion via production backend scraper |
-| **Custom Sources** | ✅ Via Pub/Sub | Webhook integration | Accept any source via message queue |
-
-**Why live Reddit?** Shows scalable, sustainable scraping without rate limit abuse.  
-**YouTube/Twitch now live:** Production API scrapers run through the same platform-agnostic pipeline with zero AI code changes.
+| Platform | Status | Type | Notes |
+|----------|--------|------|-------|
+| **YouTube** | ✅ Live | Real API + channel scan | Handle/channel resolution + uploads playlist + fallback search |
+| **Reddit** | ✅ Live | Real API scraping | Subreddit feed scan with thumbnail/media matching |
+| **X / Instagram / TikTok** | 🟡 MVP | Metadata seed adapters | Title/temporal/embedding-proxy scoring (config-driven seed JSON) |
+| **Custom Sources** | ✅ Supported | Ingest/upload routes | Route-based ingestion with shared scoring and alert model |
 
 ### 📊 **Real-Time Dashboard**
 
 - **Alert Feed:** Latest 20 detections with full metadata (confidence, category, risk score)
 - **Propagation Graph:** Visual parent→child tracking showing how content spreads
+- **Content Lineage Summary:** Node count, edge count, average lineage link score
 - **Risk Scoring:** Color-coded severity (green <40% | yellow 40-70% | orange 70-85% | red >85%)
-- **Geographic Heatmap:** (Planned) Regional piracy distribution
+- **Geographic Heatmap:** Regional piracy distribution from alert regions
 - **Live Scan Simulator:** Demo mode for presentations
 - **Polling Interval:** Configurable (2.5s standard | 1s event-aware mode)
 - **Sound Alerts:** Audio notifications for CRITICAL detections
 - **Transport Layer:** WebSocket real-time alert streaming with automatic polling fallback
+- **Judge Upload UX:** Long-running upload processing panel with stage text, elapsed timer, progress, and live status hints
 
 ### 🤖 **Automated Legal Response**
 
 - **DMCA Generation:** Gemini 2.5 Flash generates professional takedown notices
 - **Smart Triggers:** Auto-generate for risk_score > 85% + high-confidence piracy
 - **Template System:** Customizable legal language for different jurisdictions
-- **Email Delivery:** Implemented backend module sends critical-alert notifications automatically
+- **Security Guard:** Protected legal/scan/upload routes via optional `ADMIN_API_KEY`
 
 ### 📈 **Content Tracking & Analytics**
 
@@ -146,13 +145,12 @@ Track how content is:
 - ✅ **Morphed into memes** (Gemini "Meme/Fan Edit" detection)
 - ✅ **Deepfaked** (Gemini "Deepfake/AI Alteration" detection)
 
-### 🚀 **Enterprise-Ready Architecture**
+### 🚀 **Production-Oriented Architecture**
 
-- **Event-Driven:** Google Cloud Pub/Sub message queue decouples ingestion from processing
-- **Asynchronous:** Heavy video processing doesn't block API responses
-- **Scalable:** Processes 10k+ messages/sec with Cloud Run autoscaling
-- **Resilient:** Firestore automatic failover and data replication
-- **Cloud-Native:** Deployable on any cloud (GCP, AWS, Azure)
+- **Asynchronous Processing:** Upload endpoints return immediately while Python pipeline runs in background
+- **Security Hardening:** API key guard, input sanitization, route-level rate limiting, and strict CORS allowlist
+- **Lineage Model:** `asset_id`, `source_platform`, `source_url`, `parent_asset_id` on alerts
+- **Cloud Deployment:** Frontend on Vercel, backend on Render, Firestore as primary data store
 
 ### ⚡ **Zero Watermarking**
 
@@ -235,10 +233,9 @@ Track how content is:
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │ Collections:                                             │  │
 │  │ • official_hashes - Reference content fingerprints      │  │
-│  │ • pirated_hashes - Detected violation hashes            │  │
-│  │ • alerts - Rich detection metadata                      │  │
+│  │ • official_hashes - Reference content fingerprints      │  │
+│  │ • piracy_alerts / alerts - Detection metadata           │  │
 │  │ • propagation_links - Content spread tracking           │  │
-│  │ • chat_history - Conversation context (future)         │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                              │                                   │
 │                              ▼                                   │
@@ -249,7 +246,9 @@ Track how content is:
 │  │ • GET /api/propagation - Spread tracking               │  │
 │  │ • POST /api/generate-takedown - Legal notice creation  │  │
 │  │ • POST /api/trigger-scan - Demo scan simulator         │  │
-│  │ • POST /api/upload - Video file upload (Phase 2)       │  │
+│  │ • POST /api/upload-test - Upload and analyze video     │  │
+│  │ • POST /api/upload-official - Add reference content    │  │
+│  │ • GET /api/lineage - Content lineage graph             │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                              │                                   │
 │                              ▼                                   │
@@ -325,13 +324,12 @@ Real-time Alert Display
 
 | Technology | Version | Purpose |
 |-----------|---------|---------|
-| **Next.js** | 16.2.1 | React framework with SSR, App Router, and edge functions |
-| **React** | 19.2.4 | UI library with hooks and suspense |
-| **TypeScript** | ^5 | Type safety for 100% type coverage |
-| **Tailwind CSS** | ^4 | Utility-first CSS for responsive design |
-| **Recharts** | ^3.8.1 | Charting library for analytics visualization |
-| **Lucide React** | Latest | 400+ SVG icons |
-| **Framer Motion** | Latest | Smooth animations and transitions |
+| **Next.js** | 16.2.1 | React framework (App Router) |
+| **React** | 19.2.4 | UI library with hooks |
+| **TypeScript** | ^5 | Type safety |
+| **Tailwind CSS** | ^4 | Utility-first styling |
+| **Recharts** | ^3.8.1 | Charting and dashboard visualization |
+| **socket.io-client** | ^4.8.1 | Real-time alert stream subscription |
 
 ### Backend
 
@@ -371,13 +369,14 @@ Real-time Alert Display
 | Package | Version | Purpose |
 |---------|---------|---------|
 | **ImageHash** | 4.3.2 | Perceptual hashing (pHash) |
-| **OpenCV** | 4.13.0.92 | Video processing and frame extraction |
+| **OpenCV / opencv-python-headless** | 4.8+ | Video processing and frame extraction |
 | **NumPy** | 2.4.3 | Numerical operations for embeddings |
 | **PIL/Pillow** | 12.1.1 | Image manipulation |
 | **SciPy** | 1.17.1 | Scientific computing for vector math |
 | **PyWavelets** | 1.9.0 | Wavelet transforms for hashing |
-| **google-cloud-pubsub** | 2.19.0 | Pub/Sub client library |
 | **firebase-admin** | 6.4.0 | Firestore client library |
+| **google-api-python-client** | 2.100+ | YouTube Data API integration |
+| **google-genai** | 1.48+ | Gemini-based AI tasks |
 
 ---
 
@@ -400,7 +399,7 @@ NetraX/
 │   ├── dist/                         # Compiled JavaScript output
 │   ├── package.json                 # Backend dependencies
 │   ├── tsconfig.json                # TypeScript configuration
-│   └── .env.example                 # Environment variables template
+│   └── .env                          # Local environment variables (not committed)
 │
 ├── frontend/                         # Next.js Frontend Dashboard
 │   ├── src/
@@ -421,7 +420,7 @@ NetraX/
 │   ├── tsconfig.json                # TypeScript configuration
 │   ├── tailwind.config.ts           # Tailwind CSS setup
 │   ├── next.config.ts               # Next.js configuration
-│   └── .env.example                 # Environment variables template
+│   └── .env.local                    # Local environment variables (not committed)
 │
 ├── python/                           # Python ML Pipeline
 │   │
@@ -458,7 +457,7 @@ NetraX/
 │   │   └── live_scraper_reddit.py   # Live Reddit API scraper
 │   │
 │   ├── requirements.txt             # Python dependencies
-│   ├── .env.example                 # Environment variables template
+│   ├── requirements-render.txt       # Render runtime Python dependencies
 │   └── service-account-key.json     # Firebase credentials (gitignored)
 │
 ├── .gitignore                        # Git ignore configuration
@@ -600,12 +599,11 @@ npm install
 #### Create `.env.local`
 
 ```env
-# Backend API
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_API_PROD=https://netrax-backend.onrender.com
+# Backend API URL
+NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
 
-# For production (Vercel)
-NEXT_PUBLIC_APP_URL=https://your-frontend-domain.vercel.app
+# Optional: required when backend ADMIN_API_KEY is set
+# NEXT_PUBLIC_ADMIN_API_KEY=change-me
 ```
 
 ### 3. Backend Setup (Express.js)
@@ -619,28 +617,18 @@ npm install
 
 ```env
 # Server
-PORT=3001
+PORT=5000
 NODE_ENV=development
 
-# Firebase / Firestore
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_PRIVATE_KEY_ID=xxx
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project-id.iam.gserviceaccount.com
-FIREBASE_CLIENT_ID=123456789
-FIREBASE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
-FIREBASE_TOKEN_URI=https://oauth2.googleapis.com/token
-FIREBASE_AUTH_PROVIDER_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
-FIREBASE_CLIENT_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/...
+# Optional API guard (recommended for production)
+ADMIN_API_KEY=change-me
 
-# Google Cloud Storage
-GCS_PROJECT_ID=your-project-id
-GCS_BUCKET_NAME=netrax-video-storage
-GCS_KEY_FILE=./service-account-key.json
+# CORS allowlist
+FRONTEND_URL=http://localhost:3000
 
-# Google AI / Vertex AI
-GOOGLE_API_KEY=AIzaSyxxxxx
-GOOGLE_APPLICATION_CREDENTIALS=./service-account-key.json
+# Firebase credentials
+# Prefer FIREBASE_SERVICE_ACCOUNT as full JSON string in production
+# or mount /etc/secrets/serviceAccountKey.json on Render
 ```
 
 **Obtaining Service Account Key:**
@@ -702,11 +690,13 @@ npm install -g firebase-tools
 firebase emulator:start --project=your-project-id
 ```
 
-**Collections created automatically:**
-- `official_hashes` - Reference video fingerprints
-- `pirated_hashes` - Detected pirated content
-- `alerts` - Detection alerts with metadata
-- `propagation_links` - Content spread tracking
+**Collections used by current pipeline:**
+- `official_hashes` - Reference frame fingerprints
+- `official_videos` - Uploaded baseline videos
+- `piracy_alerts` - Primary alert output from upload processor
+- `alerts` - Legacy alert collection still read by dashboard
+- `propagation_links` - Propagation link visualization data
+- `ingestions` - Ingest job metadata and status
 
 ---
 
@@ -721,11 +711,11 @@ cd backend
 npm run dev
 ```
 
-Backend will run on `http://localhost:3001`
+Backend will run on `http://localhost:5000`
 
 Test health check:
 ```bash
-curl http://localhost:3001
+curl http://localhost:5000
 ```
 
 #### Start Frontend (separate terminal)
@@ -799,8 +789,8 @@ vercel --prod
 
 **Environment Variables for Vercel:**
 ```
-NEXT_PUBLIC_API_URL=https://netrax-backend.onrender.com
-NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
+NEXT_PUBLIC_BACKEND_URL=https://netrax-backend.onrender.com
+NEXT_PUBLIC_ADMIN_API_KEY=<same-value-as-backend-admin-api-key>
 ```
 
 ### Deploy Backend to Render
@@ -903,15 +893,11 @@ python detect_video.py
 # Output: "PIRACY DETECTED: 5 hash matches found"
 ```
 
-**Test Pub/Sub Message Flow:**
+**Test Live Scan Route:**
 
 ```bash
-# Terminal 1: Start subscriber
-cd python
-python subscriber.py
-
-# Terminal 2: Trigger test detection
-curl -X POST http://localhost:3001/api/trigger-scan
+# Trigger test detection
+curl -X POST http://localhost:5000/api/trigger-scan -H "x-admin-api-key: <ADMIN_API_KEY>"
 ```
 
 **View Database:**
@@ -925,25 +911,29 @@ Use Firebase Console: https://console.firebase.google.com
 ### Alert Management
 
 #### `GET /api/alerts`
-Fetches latest alerts with rich metadata
+Fetches latest alerts (top 20) from `piracy_alerts` + legacy `alerts`.
 
-**Response:**
+**Response (array):**
 ```json
-{
-  "alerts": [
-    {
-      "id": "alert_123",
-      "video_id": "reddit_live_post_456",
-      "source": "Reddit (r/sports - u/user123)",
-      "embedding_score": 92,
-      "confidence": 95,
-      "misuse_category": "Raw Broadcast Piracy",
-      "risk_score": 105,
-      "action": "🚨 AUTO-GENERATE DMCA TAKEDOWN",
-      "timestamp": "2026-04-02T06:00:00Z"
-    }
-  ]
-}
+[
+  {
+    "id": "alert_123",
+    "video_id": "upload_1776149012",
+    "source": "External (YouTube)",
+    "platform": "YouTube",
+    "url": "https://www.youtube.com/watch?v=...",
+    "confidence": 45.3,
+    "similarity_score": 45.3,
+    "misuse_category": "Unauthorized Reupload",
+    "risk_score": 50,
+    "asset_id": "asset_youtube_...",
+    "source_platform": "youtube",
+    "source_url": "https://www.youtube.com/watch?v=...",
+    "parent_asset_id": "asset_youtube_...",
+    "lineage_score": 45.3,
+    "timestamp": "2026-04-14T06:00:00.000Z"
+  }
+]
 ```
 
 #### `GET /api/propagation`
@@ -951,16 +941,25 @@ Tracks how content spreads across platforms
 
 **Response:**
 ```json
+[
+  {
+    "id": "link_1",
+    "parent_id": "asset_official_x",
+    "child_id": "asset_upload_y",
+    "similarity": 93
+  }
+]
+```
+
+#### `GET /api/lineage`
+Builds content-lineage graph from alert documents.
+
+**Response:**
+```json
 {
-  "propagation_links": [
-    {
-      "parent_id": "netflix_original_video_001",
-      "child_id": "reddit_pirate_12345",
-      "similarity": 96,
-      "source": "Reddit (r/entertainment)",
-      "timestamp": "2026-04-02T05:55:00Z"
-    }
-  ]
+  "nodes": [{ "id": "asset_x", "label": "Title", "platform": "youtube" }],
+  "edges": [{ "id": "asset_a->asset_b", "from": "asset_a", "to": "asset_b", "score": 44.8, "platform": "youtube" }],
+  "generated_at": "2026-04-14T06:00:00.000Z"
 }
 ```
 
@@ -989,46 +988,48 @@ Demo mode—simulates piracy detection
 **Response:**
 ```json
 {
-  "status": "scan_triggered",
-  "alerts_generated": 1,
-  "message": "Test alert created successfully"
+  "success": true,
+  "message": "Live scan executed and stored."
 }
 ```
 
-### Video Management (Phase 2)
+### Video Management
 
-#### `POST /api/upload`
-Upload video for processing
+#### `POST /api/upload-test`
+Upload video and start async piracy detection pipeline.
 
 **Request:** multipart/form-data
 ```
-file: <video file>
-video_id: my_video_123
+video: <video file>
 ```
 
 **Response:**
 ```json
 {
-  "url": "https://storage.googleapis.com/netrax-video-storage/my_video_123.mp4",
-  "status": "processing"
+  "success": true,
+  "message": "Video uploaded! Analyzing for piracy detection...",
+  "video_id": "upload_1776149012",
+  "status": "Processing"
 }
 ```
+
+#### `POST /api/upload-official`
+Upload official/reference video for baseline hashing.
+
+#### `POST /api/ingest-official`
+Ingest from `gs://` video URL and generate official frame hashes.
 
 ---
 
 ## ⚡ Real-Time Features
 
-### WebSocket Events (Planned Phase 2)
+### WebSocket Events (Implemented)
 
 Server → Client:
-- `alert-created` - New piracy detected
-- `alert-updated` - Alert status changed
-- `propagation-detected` - Content spread tracked
-- `takedown-generated` - Legal notice ready
+- `new-alert` - New alert pushed from Firestore listeners
 
 Client → Server:
 - `subscribe-alerts` - Join real-time feed
-- `generate-dmca` - Request takedown generation
 
 ---
 
@@ -1039,33 +1040,41 @@ Client → Server:
 #### Backend `.env`
 ```env
 # Server
-PORT=3001
+PORT=5000
 NODE_ENV=production
 
-# Firebase
-FIREBASE_PROJECT_ID=your-project
-FIREBASE_PRIVATE_KEY=...
-FIREBASE_CLIENT_EMAIL=...
+# API protection (optional in dev, recommended in prod)
+ADMIN_API_KEY=your-random-secret
 
-# Google Cloud
-GCS_BUCKET_NAME=netrax-video-storage
-GOOGLE_APPLICATION_CREDENTIALS=./service-account-key.json
+# CORS
+FRONTEND_URL=https://your-frontend.vercel.app
 
-# Monitoring
-LOG_LEVEL=debug
+# Firebase credentials (one of the following)
+# FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}
+# or mount /etc/secrets/serviceAccountKey.json on Render
 ```
 
 #### Frontend `.env.local`
 ```env
-NEXT_PUBLIC_API_URL=https://netrax-backend.onrender.com
-NEXT_PUBLIC_APP_URL=https://netrax-frontend.vercel.app
+NEXT_PUBLIC_BACKEND_URL=https://netrax-backend.onrender.com
+NEXT_PUBLIC_ADMIN_API_KEY=your-random-secret
 ```
 
 #### Python `.env`
 ```env
-GCP_PROJECT_ID=your-project
-PUBSUB_TOPIC_ID=video-frames
-GOOGLE_API_KEY=...
+YOUTUBE_API_KEY=your-youtube-data-api-key
+EXTERNAL_FRAME_LIMIT=3
+YOUTUBE_LOOKBACK_DAYS=365
+EXTERNAL_MATCH_THRESHOLD=40
+SOCIAL_MATCH_THRESHOLD=35
+LOCAL_MATCH_DISTANCE_THRESHOLD=18
+LOCAL_MATCH_SAMPLE_SIZE=2000
+LOCAL_MATCH_FRAME_LIMIT=10
+
+# Optional seed adapters (JSON array strings)
+X_SEED_POSTS_JSON=[]
+INSTAGRAM_SEED_POSTS_JSON=[]
+TIKTOK_SEED_POSTS_JSON=[]
 ```
 
 ### Tuning Detection Parameters
@@ -1123,7 +1132,7 @@ RISK_MULTIPLIERS = {
 
 ```bash
 # Load test backend
-wrk -t4 -c100 -d30s http://localhost:3001/api/alerts
+wrk -t4 -c100 -d30s http://localhost:5000/api/alerts
 
 # Expected: >1000 req/sec on local machine
 ```
@@ -1136,16 +1145,19 @@ import requests
 import json
 
 # 1. Trigger scan
-response = requests.post('http://localhost:3001/api/trigger-scan')
+response = requests.post(
+    'http://localhost:5000/api/trigger-scan',
+    headers={'x-admin-api-key': 'YOUR_ADMIN_API_KEY'}
+)
 assert response.status_code == 200
 
 # 2. Fetch alerts
-response = requests.get('http://localhost:3001/api/alerts')
+response = requests.get('http://localhost:5000/api/alerts')
 alerts = response.json()
-assert len(alerts['alerts']) > 0
+assert len(alerts) > 0
 
 # 3. Verify alert structure
-alert = alerts['alerts'][0]
+alert = alerts[0]
 assert 'embedding_score' in alert
 assert 'misuse_category' in alert
 assert 'risk_score' in alert
@@ -1320,8 +1332,8 @@ This project is built and maintained by:
 - 🤔 Ideas & Planning
 ## 🔍 FAQ
 
-**Q: Why only Reddit live?**  
-A: Reddit proves our architecture works. Twitch/YouTube require enterprise API access. Our Pub/Sub design makes platforms swappable.
+**Q: Which sources are live today?**  
+A: YouTube and Reddit checks are live in the upload pipeline. X/Instagram/TikTok are available as MVP metadata-seed adapters.
 
 **Q: Can this detect deep fakes?**  
 A: Yes! Gemini classifies content as "Deepfake/AI Alteration" with 1.3x risk multiplier for legal priority.
@@ -1330,7 +1342,7 @@ A: Yes! Gemini classifies content as "Deepfake/AI Alteration" with 1.3x risk mul
 A: Triple-layer verification reduces false positives to <2% (pHash alone: ~30%, embeddings alone: ~15%).
 
 **Q: How fast is detection?**  
-A: Real-time—Reddit post detected within 3 seconds of upload.
+A: Upload analysis is asynchronous and typically finishes in ~30-120 seconds depending on video size and external API latency.
 
 **Q: Can international users access it?**  
 A: Yes—deployed globally on Vercel (edge) and Render (backend).
