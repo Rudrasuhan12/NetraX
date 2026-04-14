@@ -1209,7 +1209,7 @@ Pirated Video (Reddit/Twitch/etc.) → Extract Frames → Generate Hash
 
 ### Impact
 - **Netflix:** Detect pirated episodes in minutes, not weeks
-- **ESPN:** Track viral broadcasts across Reddit, Twitter, YouTube
+- **ESPN:** Track viral broadcasts across Reddit and YouTube, with X/Instagram/TikTok adapter-ready scoring
 - **Reddit/YouTube:** Automated DMCA processing, reduced manual review
 - **Legal Teams:** Proof of AI-verified intent for court cases
 - **Global:** Scales to detect millions of videos/day
