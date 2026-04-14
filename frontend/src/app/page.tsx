@@ -90,6 +90,13 @@ export default function Dashboard() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isAlertDetailOpen, setIsAlertDetailOpen] = useState(false);
   const [isExternalDetailOpen, setIsExternalDetailOpen] = useState(false);
+  const [isVideoAnalyzing, setIsVideoAnalyzing] = useState(false);
+  const [analyzingFilename, setAnalyzingFilename] = useState("");
+  const [analyzingProgress, setAnalyzingProgress] = useState(0);
+  const [analyzingElapsedSec, setAnalyzingElapsedSec] = useState(0);
+  const [analyzingStartedAt, setAnalyzingStartedAt] = useState<number | null>(null);
+  const [processingBaselineAlertId, setProcessingBaselineAlertId] = useState<string | null>(null);
+  const [processingHintIndex, setProcessingHintIndex] = useState(0);
 
   const soundEnabledRef = useRef(false);
   const lastAlertIdRef = useRef<string | null>(null);
@@ -127,6 +134,22 @@ export default function Dashboard() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4500);
   };
+
+  const getProcessingStage = (elapsedSeconds: number) => {
+    if (elapsedSeconds < 12) return "Extracting frames and generating fingerprints";
+    if (elapsedSeconds < 30) return "Scanning YouTube / Reddit / social propagation";
+    if (elapsedSeconds < 60) return "Computing multi-signal match score";
+    if (elapsedSeconds < 90) return "Correlating lineage graph and final risk scoring";
+    if (elapsedSeconds < 120) return "High-load processing: finalizing results";
+    return "Extended processing window: still running deep cross-platform checks";
+  };
+
+  const processingHints = [
+    "Tip: Judges can continue exploring alerts while this runs in background.",
+    "We check multiple sources and signals, so longer videos may take more time.",
+    "Results auto-appear in the feed as soon as processing completes.",
+    "If this crosses 2 minutes, processing is usually waiting on external API latency.",
+  ];
 
   // Sound enablement click listener
   useEffect(() => {
@@ -257,6 +280,53 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [isEventMode]);
 
+  useEffect(() => {
+    if (!isVideoAnalyzing || !analyzingStartedAt) return;
+
+    const timer = setInterval(() => {
+      const elapsedSec = Math.floor((Date.now() - analyzingStartedAt) / 1000);
+      setAnalyzingElapsedSec(elapsedSec);
+      let targetProgress = 0;
+      if (elapsedSec <= 30) {
+        targetProgress = 5 + elapsedSec * 1.7; // 5 -> 56
+      } else if (elapsedSec <= 75) {
+        targetProgress = 56 + (elapsedSec - 30) * 0.62; // 56 -> 84
+      } else if (elapsedSec <= 120) {
+        targetProgress = 84 + (elapsedSec - 75) * 0.24; // 84 -> 94.8
+      } else {
+        targetProgress = 94.8 + Math.min((elapsedSec - 120) * 0.04, 4); // 94.8 -> 98.8
+      }
+      setAnalyzingProgress(targetProgress);
+    }, 700);
+
+    return () => clearInterval(timer);
+  }, [isVideoAnalyzing, analyzingStartedAt]);
+
+  useEffect(() => {
+    if (!isVideoAnalyzing) return;
+    const hintTimer = setInterval(() => {
+      setProcessingHintIndex((idx) => (idx + 1) % processingHints.length);
+    }, 5000);
+    return () => clearInterval(hintTimer);
+  }, [isVideoAnalyzing]);
+
+  useEffect(() => {
+    if (!isVideoAnalyzing || alerts.length === 0) return;
+    const latestAlertId = alerts[0]?.id;
+    if (latestAlertId && processingBaselineAlertId && latestAlertId !== processingBaselineAlertId) {
+      setAnalyzingProgress(100);
+      setTimeout(() => {
+        setIsVideoAnalyzing(false);
+        setAnalyzingStartedAt(null);
+        setAnalyzingElapsedSec(0);
+        setProcessingBaselineAlertId(null);
+        setAnalyzingFilename("");
+        setProcessingHintIndex(0);
+      }, 1200);
+      showToast("success", "Detection result received. Check the alert feed.");
+    }
+  }, [alerts, isVideoAnalyzing, processingBaselineAlertId]);
+
   // Takedown Generation Trigger
   const handleGenerateTakedown = async (alert: Alert) => {
     setSelectedAlert(alert);
@@ -293,6 +363,13 @@ export default function Dashboard() {
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setIsVideoAnalyzing(true);
+    setAnalyzingFilename(file.name);
+    setAnalyzingProgress(3);
+    setAnalyzingElapsedSec(0);
+    setAnalyzingStartedAt(Date.now());
+    setProcessingBaselineAlertId(alerts[0]?.id || null);
+    setProcessingHintIndex(0);
     showToast("info", `Uploading ${file.name}...`);
 
     try {
@@ -308,12 +385,19 @@ export default function Dashboard() {
       const data = await response.json();
       
       if (data.success) {
-        showToast("success", `Video uploaded: ${data.message}`);
+        showToast("info", "Upload complete. Analysis started (typically 30-90 seconds).");
       } else {
         throw new Error(data.error || 'Upload failed');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Upload failed";
+      setIsVideoAnalyzing(false);
+      setAnalyzingStartedAt(null);
+      setAnalyzingProgress(0);
+      setAnalyzingElapsedSec(0);
+      setAnalyzingFilename("");
+      setProcessingBaselineAlertId(null);
+      setProcessingHintIndex(0);
       showToast("error", `Upload failed: ${message}`);
     }
 
@@ -398,12 +482,30 @@ export default function Dashboard() {
     @keyframes radarSpin {
       100% { transform: rotate(360deg); }
     }
+    @keyframes progressStripes {
+      0% { background-position: 0 0; }
+      100% { background-position: 40px 0; }
+    }
     .animate-new-alert {
       animation: slideDownFade 0.4s ease-out forwards;
     }
     .radar-sweep {
       background: conic-gradient(from 0deg, transparent 70%, rgba(59, 130, 246, 0.4) 100%);
       animation: radarSpin 2s linear infinite;
+    }
+    .progress-stripes {
+      background-image: linear-gradient(
+        135deg,
+        rgba(255,255,255,0.28) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255,255,255,0.28) 50%,
+        rgba(255,255,255,0.28) 75%,
+        transparent 75%,
+        transparent
+      );
+      background-size: 24px 24px;
+      animation: progressStripes 1.4s linear infinite;
     }
   `;
 
@@ -460,36 +562,45 @@ export default function Dashboard() {
           <div className="flex items-center gap-5">
           {/* 🎬 JUDGE DEMO: Video Upload Button */}
           <div className="relative group flex items-center">
-            <label className="flex items-center gap-2 px-5 py-2 rounded-full font-bold text-xs transition-all shadow-sm border bg-green-600 text-white border-green-700 hover:bg-green-500 hover:shadow-lg hover:shadow-green-500/30 cursor-pointer">
-              <span className="text-sm">📤</span>
-              Analyze Video for Piracy
+            <label className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-xs transition-all shadow-sm border active:scale-95 ${
+              isVideoAnalyzing
+                ? "bg-green-100 text-green-700 border-green-200 cursor-wait"
+                : "bg-green-600 text-white border-green-700 hover:bg-green-500 hover:shadow-lg hover:shadow-green-500/30 hover:-translate-y-0.5 cursor-pointer"
+            }`}>
+              <span className={`text-sm inline-flex ${isVideoAnalyzing ? "animate-spin" : ""}`}>
+                {isVideoAnalyzing ? "⟳" : "📤"}
+              </span>
+              {isVideoAnalyzing ? "Processing Upload..." : "Analyze Video for Piracy"}
               <input 
                 type="file" 
                 accept="video/*" 
                 className="hidden" 
                 onChange={handleVideoUpload}
+                disabled={isVideoAnalyzing}
               />
             </label>
             
             {/* Tooltip */}
-            <div className="absolute right-0 top-12 w-72 p-3 bg-gray-900 text-gray-300 text-[10px] font-mono rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none border border-gray-700">
-              <span className="block text-white font-bold mb-1 font-sans text-xs">For Judges & Reviewers:</span>
-              Upload any video and NetraX will automatically detect if it matches official sports content. Full AI pipeline runs in 5-10 seconds.
-            </div>
-          </div>
+             <div className="absolute right-0 top-12 w-72 p-3 bg-gray-900 text-gray-300 text-[10px] font-mono rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none border border-gray-700">
+               <span className="block text-white font-bold mb-1 font-sans text-xs">For Judges & Reviewers:</span>
+               Upload any video and NetraX will automatically detect if it matches official sports content. Typical runtime is 30-120 seconds.
+             </div>
+           </div>
           
           {/* 🔥 REDESIGNED: Judge Verification Simulator Button */}
           <div className="relative group flex items-center">
             <button 
                 onClick={handleTriggerScan}
                 disabled={isScanning}
-                className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-xs transition-all shadow-sm border ${
+                className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-xs transition-all shadow-sm border active:scale-95 ${
                     isScanning 
-                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" 
-                    : "bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-500/30"
+                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" 
+                    : "bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5"
                 }`}
             >
-                <span className="text-sm">{isScanning ? "📡" : "🚀"}</span>
+                <span className={`text-sm inline-flex ${isScanning ? "animate-spin" : ""}`}>
+                  {isScanning ? "⟳" : "🚀"}
+                </span>
                 {isScanning ? "Intercepting Stream..." : "Simulate Live Web Scan"}
             </button>
             
@@ -529,6 +640,64 @@ export default function Dashboard() {
 
         </div>
       </div>
+
+      {isVideoAnalyzing && (
+        <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-green-800">Analysis in progress for judges</p>
+              <p className="text-xs text-green-700 mt-1 truncate max-w-[760px]">
+                File: {analyzingFilename || "uploaded video"} • {getProcessingStage(analyzingElapsedSec)}
+              </p>
+            </div>
+            <span className="text-xs font-bold text-green-800 bg-white border border-green-200 rounded-full px-3 py-1">
+              {Math.round(analyzingProgress)}%
+            </span>
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px]">
+            <span className="text-green-800/80">Elapsed: {analyzingElapsedSec}s</span>
+            {analyzingElapsedSec > 60 && (
+              <span className="font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                Taking longer than usual, still processing...
+              </span>
+            )}
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-green-100 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-green-600 transition-all duration-500 progress-stripes"
+              style={{ width: `${Math.max(Math.min(analyzingProgress, 100), 0)}%` }}
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+            {[
+              { label: "Upload received", at: 2 },
+              { label: "Frame extraction", at: 20 },
+              { label: "Cross-platform scan", at: 60 },
+              { label: "Final scoring", at: 105 },
+            ].map((step) => {
+              const done = analyzingElapsedSec >= step.at;
+              return (
+                <div
+                  key={step.label}
+                  className={`rounded-md border px-2 py-1 ${
+                    done
+                      ? "border-green-300 bg-green-100 text-green-800"
+                      : "border-green-200 bg-white text-green-700/70"
+                  }`}
+                >
+                  {done ? "✓ " : "• "}{step.label}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[11px] text-green-700">
+            This run may take 30-90 seconds depending on video size, API latency, and external source checks.
+          </p>
+          <p className="mt-1 text-[11px] text-green-700/90 font-medium">
+            {processingHints[processingHintIndex]}
+          </p>
+        </div>
+      )}
 
       {/* STATS */}
       <div className="grid grid-cols-3 gap-6 mb-8">
