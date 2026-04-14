@@ -1,0 +1,14 @@
+# Runtime dependencies needed by backend-triggered Python pipeline on Render
+ImageHash>=4.3.1
+numpy>=2.0.0
+opencv-python-headless>=4.8.0
+pillow>=10.0.0
+scipy>=1.11.0
+PyWavelets>=1.5.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+firebase-admin>=6.4.0
+google-cloud-storage>=2.14.0
+google-api-python-client>=2.100.0
+google-genai>=1.48.0
+praw>=7.7.0
